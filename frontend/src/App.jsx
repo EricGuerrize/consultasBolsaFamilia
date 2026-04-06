@@ -1,23 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, Search, Download, AlertCircle, CheckCircle2, ShieldCheck, LayoutDashboard, History, Settings } from 'lucide-react';
+import {
+  Upload, Search, Download, AlertCircle, CheckCircle2,
+  ShieldCheck, XCircle, Loader2, Filter, FileText
+} from 'lucide-react';
 
-function App() {
+export default function App() {
   const [file, setFile] = useState(null);
   const [columns, setColumns] = useState([]);
+  const [fileInfo, setFileInfo] = useState(null);
   const [loading, setLoading] = useState(false);
   const [jobId, setJobId] = useState(null);
   const [status, setStatus] = useState(null);
+  const [apiHealth, setApiHealth] = useState('checking');
+  const [error, setError] = useState(null);
+  const [searchFilter, setSearchFilter] = useState('');
   const [config, setConfig] = useState({
     m_ini: '202401',
     m_fim: '202403',
     modo: 'municipio',
     ibge: '',
     api_key: '',
-    col_cpf: 'cpf',
-    col_nome: 'nome'
+    col_cpf: '',
+    col_nome: '',
   });
 
-  // Polling para o status do cruzamento
+  useEffect(() => {
+    fetch('/api/health')
+      .then(r => (r.ok ? setApiHealth('ok') : setApiHealth('error')))
+      .catch(() => setApiHealth('error'));
+  }, []);
+
   useEffect(() => {
     let interval;
     if (jobId && status?.status === 'processing') {
@@ -31,7 +43,7 @@ function App() {
             setLoading(false);
           }
         } catch (err) {
-          console.error("Erro ao checar status", err);
+          console.error('Erro ao checar status', err);
         }
       }, 2000);
     }
@@ -41,232 +53,366 @@ function App() {
   const handleFileUpload = async (e) => {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
-
     setFile(uploadedFile);
+    setColumns([]);
+    setFileInfo(null);
+    setError(null);
+    setStatus(null);
+
     const formData = new FormData();
     formData.append('file', uploadedFile);
-
     try {
-      const res = await fetch('/api/upload', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch('/api/upload', { method: 'POST', body: formData });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Erro ao ler arquivo');
       setColumns(data.columns);
+      setFileInfo({ total: data.total, filename: data.filename });
+      const cpfCol = data.columns.find(c => /cpf/i.test(c)) || '';
+      const nomeCol = data.columns.find(c => /^nome|name/i.test(c)) || '';
+      setConfig(prev => ({ ...prev, col_cpf: cpfCol, col_nome: nomeCol }));
     } catch (err) {
-      alert("Erro ao ler colunas do arquivo.");
+      setError(err.message);
     }
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    const dropped = e.dataTransfer.files[0];
+    if (dropped) handleFileUpload({ target: { files: [dropped] } });
   };
 
   const startCrossing = async () => {
     if (!file) return;
     setLoading(true);
-    
+    setError(null);
+    setStatus(null);
+    setSearchFilter('');
+
     const formData = new FormData();
     formData.append('file', file);
     Object.keys(config).forEach(key => formData.append(key, config[key]));
 
     try {
-      const res = await fetch('/api/cross', {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch('/api/cross', { method: 'POST', body: formData });
       const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || 'Erro ao iniciar cruzamento');
       setJobId(data.job_id);
       setStatus({ status: 'processing', progress: 0 });
     } catch (err) {
       setLoading(false);
-      alert("Erro ao iniciar cruzamento.");
+      setError(err.message);
     }
   };
 
-  const exportResults = () => {
+  const filteredResults = (status?.result || []).filter(r => {
+    if (!searchFilter) return true;
+    const q = searchFilter.toLowerCase();
+    return (
+      r.servidor?.toLowerCase().includes(q) ||
+      r.cpf?.includes(q) ||
+      r.municipio?.toLowerCase().includes(q) ||
+      r.beneficiario?.toLowerCase().includes(q)
+    );
+  });
+
+  const totalValue = (status?.result || []).reduce((sum, r) => sum + (r.valor || 0), 0);
+
+  const exportCSV = () => {
     if (!status?.result) return;
-    const csvContent = "data:text/csv;charset=utf-8," 
-      + ["Servidor", "CPF", "Beneficiario", "Municipio", "UF", "Mes", "Valor"].join(",") + "\n"
-      + status.result.map(r => Object.values(r).join(",")).join("\n");
-    
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", "resultados_bolsafamilia.csv");
-    document.body.appendChild(link);
+    const headers = ['Servidor', 'CPF', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor'];
+    const escape = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = status.result.map(r =>
+      [r.servidor, r.cpf, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor].map(escape)
+    );
+    const csv = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'resultados_bolsafamilia.csv';
     link.click();
+    URL.revokeObjectURL(url);
   };
+
+  const canStart = file && !loading && config.col_cpf;
 
   return (
     <div className="container animate-in">
       <header>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <ShieldCheck size={32} color="#3b82f6" />
+          <ShieldCheck size={30} color="#3b82f6" />
           <h1>Portal de Auditoria Bolsa Família</h1>
-        </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
-          <button className="btn" style={{ background: 'transparent' }}>
-            <History size={18} style={{ marginRight: '8px' }} /> Histórico
-          </button>
-          <button className="btn" style={{ background: 'transparent' }}>
-            <Settings size={18} style={{ marginRight: '8px' }} /> Config
-          </button>
         </div>
       </header>
 
-      {/* Stats Quick View */}
+      {/* Stats */}
       <div className="dashboard-grid">
         <div className="card glass">
           <div className="card-title">Status da API</div>
-          <div className="card-value" style={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <CheckCircle2 size={24} /> Conectado
-          </div>
+          {apiHealth === 'checking' && (
+            <div className="card-value status-checking">
+              <Loader2 size={18} className="spin" /> Verificando...
+            </div>
+          )}
+          {apiHealth === 'ok' && (
+            <div className="card-value status-ok">
+              <CheckCircle2 size={22} /> Conectado
+            </div>
+          )}
+          {apiHealth === 'error' && (
+            <div className="card-value status-error">
+              <XCircle size={22} /> Offline
+            </div>
+          )}
         </div>
+
         <div className="card glass">
           <div className="card-title">Servidores Carregados</div>
-          <div className="card-value">{file ? "Confirmado" : "---"}</div>
+          <div className="card-value">{fileInfo ? fileInfo.total.toLocaleString('pt-BR') : '---'}</div>
+          {fileInfo && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {fileInfo.filename}
+            </div>
+          )}
         </div>
+
         <div className="card glass">
           <div className="card-title">Alertas Encontrados</div>
-          <div className="card-value" style={{ color: status?.result?.length > 0 ? '#ef4444' : 'inherit' }}>
-            {status?.result ? status.result.length : "0"}
+          <div className="card-value" style={{ color: (status?.result?.length || 0) > 0 ? 'var(--error)' : 'inherit' }}>
+            {status?.result ? status.result.length.toLocaleString('pt-BR') : '0'}
           </div>
+          {(status?.result?.length || 0) > 0 && (
+            <div style={{ fontSize: '0.72rem', color: 'var(--error)', marginTop: '4px' }}>
+              Total: R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          )}
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: '2rem' }}>
-        {/* Sidebar de Configuração */}
+      {error && (
+        <div className="error-banner">
+          <AlertCircle size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="main-grid">
+        {/* Sidebar */}
         <div className="form-section glass">
-          <h2 style={{ fontSize: '1.2rem', marginBottom: '1.5rem' }}>Configuração</h2>
-          
+          <h2 className="section-title">Configuração</h2>
+
           <div className="input-group">
             <label>Arquivo de Servidores</label>
-            <div style={{ 
-              border: '2px dashed var(--border-color)', 
-              borderRadius: '8px', 
-              padding: '1.5rem', 
-              textAlign: 'center',
-              cursor: 'pointer'
-            }} onClick={() => document.getElementById('fileInput').click()}>
-              <Upload size={24} style={{ marginBottom: '8px', color: 'var(--text-secondary)' }} />
-              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                {file ? file.name : "Clique para subir CSV ou Excel"}
+            <div
+              className={`upload-zone${file ? ' uploaded' : ''}`}
+              onClick={() => document.getElementById('fileInput').click()}
+              onDragOver={e => e.preventDefault()}
+              onDrop={handleDrop}
+            >
+              <Upload size={22} style={{ color: file ? 'var(--success)' : 'var(--text-dim)' }} />
+              <div className="upload-label">
+                {file ? file.name : 'Arraste ou clique para subir CSV / Excel'}
               </div>
-              <input 
-                id="fileInput" 
-                type="file" 
-                hidden 
-                onChange={handleFileUpload}
-                accept=".csv,.xlsx,.xls"
+              {fileInfo && <div className="badge-success">{fileInfo.total.toLocaleString('pt-BR')} registros</div>}
+              <input id="fileInput" type="file" hidden onChange={handleFileUpload} accept=".csv,.xlsx,.xls" />
+            </div>
+          </div>
+
+          {columns.length > 0 && (
+            <div className="mapping-box">
+              <div className="mapping-title">Mapeamento de Colunas</div>
+              <div className="input-group" style={{ marginBottom: '0.75rem' }}>
+                <label>Coluna de CPF *</label>
+                <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
+                  <option value="">-- Selecione --</option>
+                  {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+              <div className="input-group" style={{ marginBottom: 0 }}>
+                <label>Coluna de Nome</label>
+                <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
+                  <option value="">-- Selecione --</option>
+                  {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+
+          <div className="input-group">
+            <label>Chave de API (Portal da Transparência)</label>
+            <input
+              type="password"
+              placeholder="Sua chave de acesso"
+              value={config.api_key}
+              onChange={e => setConfig({ ...config, api_key: e.target.value })}
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className="input-group">
+              <label>Mês Início</label>
+              <input
+                type="text"
+                placeholder="YYYYMM"
+                value={config.m_ini}
+                maxLength={6}
+                onChange={e => setConfig({ ...config, m_ini: e.target.value })}
+              />
+            </div>
+            <div className="input-group">
+              <label>Mês Fim</label>
+              <input
+                type="text"
+                placeholder="YYYYMM"
+                value={config.m_fim}
+                maxLength={6}
+                onChange={e => setConfig({ ...config, m_fim: e.target.value })}
               />
             </div>
           </div>
 
           <div className="input-group">
-            <label>Chave de API (Portal da Transparência)</label>
-            <input 
-              type="password" 
-              placeholder="••••••••••••••••" 
-              value={config.api_key}
-              onChange={e => setConfig({...config, api_key: e.target.value})}
-            />
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-            <div className="input-group">
-              <label>Mês Início</label>
-              <input type="text" placeholder="202401" value={config.m_ini} onChange={e => setConfig({...config, m_ini: e.target.value})} />
-            </div>
-            <div className="input-group">
-              <label>Mês Fim</label>
-              <input type="text" placeholder="202403" value={config.m_fim} onChange={e => setConfig({...config, m_fim: e.target.value})} />
-            </div>
-          </div>
-
-          <div className="input-group">
             <label>Modo de Cruzamento</label>
-            <select value={config.modo} onChange={e => setConfig({...config, modo: e.target.value})}>
+            <select value={config.modo} onChange={e => setConfig({ ...config, modo: e.target.value })}>
               <option value="municipio">Em Lote (Por Município)</option>
-              <option value="cpf">Pincelado (Por CPF)</option>
+              <option value="cpf">Individual (Por CPF)</option>
             </select>
           </div>
 
           {config.modo === 'municipio' && (
             <div className="input-group">
-              <label>Código IBGE (Município)</label>
-              <input type="text" placeholder="Ex: 5107602" value={config.ibge} onChange={e => setConfig({...config, ibge: e.target.value})} />
+              <label>Código IBGE do Município</label>
+              <input
+                type="text"
+                placeholder="Ex: 5107602"
+                value={config.ibge}
+                onChange={e => setConfig({ ...config, ibge: e.target.value })}
+              />
             </div>
           )}
 
-          <button 
-            className="btn btn-primary" 
-            style={{ width: '100%', marginTop: '1rem' }}
-            disabled={!file || loading}
-            onClick={startCrossing}
-          >
-            {loading ? "Processando..." : <><Search size={18} style={{ marginRight: '8px' }} /> Iniciar Cruzamento</>}
+          <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }} disabled={!canStart} onClick={startCrossing}>
+            {loading
+              ? <><Loader2 size={15} className="spin" style={{ marginRight: '8px' }} />Processando...</>
+              : <><Search size={15} style={{ marginRight: '8px' }} />Iniciar Cruzamento</>}
           </button>
+          {file && !config.col_cpf && (
+            <p style={{ fontSize: '0.72rem', color: 'var(--text-dim)', marginTop: '0.5rem', textAlign: 'center' }}>
+              Selecione a coluna de CPF para continuar
+            </p>
+          )}
         </div>
 
-        {/* Área de Resultados */}
-        <div className="glass" style={{ padding: '2rem', borderRadius: 'var(--radius)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.2rem' }}>Resultados do Cruzamento</h2>
-            {status?.result?.length > 0 && (
-              <button className="btn btn-primary" style={{ padding: '0.5rem 1rem' }} onClick={exportResults}>
-                <Download size={16} style={{ marginRight: '6px' }} /> Exportar
+        {/* Results */}
+        <div className="glass results-panel">
+          <div className="results-header">
+            <h2 className="section-title" style={{ marginBottom: 0 }}>Resultados do Cruzamento</h2>
+            {(status?.result?.length || 0) > 0 && (
+              <button className="btn btn-primary btn-sm" onClick={exportCSV}>
+                <Download size={13} style={{ marginRight: '5px' }} />Exportar CSV
               </button>
             )}
           </div>
 
+          {(status?.result?.length || 0) > 0 && (
+            <div style={{ position: 'relative', marginBottom: '1rem' }}>
+              <Filter size={13} className="filter-icon" />
+              <input
+                type="text"
+                placeholder="Filtrar por nome, CPF ou município..."
+                value={searchFilter}
+                onChange={e => setSearchFilter(e.target.value)}
+                style={{ paddingLeft: '34px' }}
+              />
+            </div>
+          )}
+
           {loading && (
-            <div style={{ textAlign: 'center', padding: '3rem' }}>
+            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
               <div className="progress-bar-bg">
-                <div className="progress-bar-fill" style={{ width: `${status?.progress || 0}%` }}></div>
+                <div className="progress-bar-fill" style={{ width: `${status?.progress || 0}%` }} />
               </div>
-              <div style={{ color: 'var(--text-secondary)', marginTop: '0.5rem' }}>
-                Progresso: {status?.progress || 0}%
-              </div>
+              <p style={{ color: 'var(--text-secondary)', marginTop: '0.75rem', fontSize: '0.875rem' }}>
+                {status?.progress || 0}% concluído
+              </p>
+              <p style={{ color: 'var(--text-dim)', marginTop: '0.25rem', fontSize: '0.75rem' }}>
+                Consultando API do Portal da Transparência...
+              </p>
             </div>
           )}
 
-          {!loading && (!status?.result || status.result.length === 0) && (
-            <div style={{ textAlign: 'center', padding: '5rem', color: 'var(--text-dim)' }}>
-              <LayoutDashboard size={48} style={{ marginBottom: '1rem', opacity: 0.2 }} />
+          {status?.status === 'failed' && (
+            <div className="error-banner">
+              <AlertCircle size={16} />
+              <span>Erro no cruzamento: {status.error}</span>
+            </div>
+          )}
+
+          {!loading && status?.status === 'completed' && status.result.length === 0 && (
+            <div className="empty-state" style={{ color: 'var(--success)' }}>
+              <CheckCircle2 size={44} style={{ opacity: 0.5, marginBottom: '0.75rem' }} />
+              <p style={{ fontWeight: 600 }}>Nenhum servidor encontrado como beneficiário.</p>
+              <p style={{ fontSize: '0.8rem', marginTop: '0.25rem' }}>O cruzamento foi concluído sem alertas.</p>
+            </div>
+          )}
+
+          {!loading && !status && (
+            <div className="empty-state">
+              <FileText size={44} style={{ opacity: 0.15, marginBottom: '0.75rem' }} />
               <p>Nenhum dado processado ainda.</p>
-              <p style={{ fontSize: '0.8rem' }}>Ajuste os filtros e clique em Iniciar.</p>
+              <p style={{ fontSize: '0.8rem', marginTop: '0.25rem', color: 'var(--text-dim)' }}>
+                Configure os parâmetros e clique em Iniciar.
+              </p>
             </div>
           )}
 
-          {status?.result?.length > 0 && (
-            <div className="results-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Servidor</th>
-                    <th>CPF</th>
-                    <th>Beneficiário</th>
-                    <th>Município</th>
-                    <th>Mês</th>
-                    <th>Valor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {status.result.map((row, idx) => (
-                    <tr key={idx}>
-                      <td>{row.servidor}</td>
-                      <td>{row.cpf}</td>
-                      <td>{row.beneficiario}</td>
-                      <td>{row.municipio} / {row.uf}</td>
-                      <td>{row.mes}</td>
-                      <td style={{ fontWeight: 600, color: '#f87171' }}>R$ {row.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+          {filteredResults.length > 0 && (
+            <>
+              <div className="results-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '36px' }}>#</th>
+                      <th>Servidor</th>
+                      <th>CPF</th>
+                      <th>Beneficiário (API)</th>
+                      <th>Município / UF</th>
+                      <th>Mês Ref.</th>
+                      <th>Data Saque</th>
+                      <th>Valor</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {filteredResults.map((row, idx) => (
+                      <tr key={idx}>
+                        <td style={{ color: 'var(--text-dim)', fontSize: '0.72rem' }}>{idx + 1}</td>
+                        <td style={{ fontWeight: 500 }}>{row.servidor}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: '0.78rem', letterSpacing: '0.03em' }}>{row.cpf}</td>
+                        <td>{row.beneficiario}</td>
+                        <td>{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
+                        <td>{row.mes}</td>
+                        <td>{row.data_saque || '—'}</td>
+                        <td className="valor-cell">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {searchFilter && (
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginTop: '0.5rem', textAlign: 'right' }}>
+                  Exibindo {filteredResults.length} de {status.result.length} resultados
+                </p>
+              )}
+
+              <div className="summary-bar">
+                <span>Total de alertas: <strong>{status.result.length.toLocaleString('pt-BR')}</strong></span>
+                <span>Valor total: <strong>R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
+              </div>
+            </>
           )}
         </div>
       </div>
     </div>
   );
 }
-
-export default App;

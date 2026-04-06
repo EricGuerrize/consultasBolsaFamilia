@@ -4,6 +4,7 @@ import json
 import time
 import pandas as pd
 import requests
+from io import BytesIO, StringIO
 from typing import List, Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -94,16 +95,20 @@ class BolsaFamiliaAPI:
 #  ENDPOINTS
 # ─────────────────────────────────────────────
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "Bolsa Família API"}
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
         content = await file.read()
-        suffix = Path(file.filename).suffix
+        suffix = Path(file.filename).suffix.lower()
         if suffix == ".csv":
-            df = pd.read_csv(pd.compat.StringIO(content.decode("utf-8-sig")), dtype=str)
+            df = pd.read_csv(StringIO(content.decode("utf-8-sig")), dtype=str)
         else:
-            df = pd.read_excel(content, dtype=str)
-        
+            df = pd.read_excel(BytesIO(content), dtype=str)
+
         df.columns = [c.strip().lower() for c in df.columns]
         return {"columns": list(df.columns), "filename": file.filename, "total": len(df)}
     except Exception as e:
@@ -213,12 +218,13 @@ def format_result(srv, reg):
     bf = reg.get("beneficiarioBolsaFamilia", {})
     mun = reg.get("municipio", {})
     return {
-        "servidor": srv["nome"],
-        "cpf": srv["cpf"],
-        "beneficiario": bf.get("nome"),
-        "municipio": mun.get("nomeIBGE"),
-        "uf": mun.get("uf", {}).get("sigla"),
+        "servidor": srv.get("nome", ""),
+        "cpf": srv.get("cpf", ""),
+        "beneficiario": bf.get("nome", ""),
+        "municipio": mun.get("nomeIBGE", ""),
+        "uf": mun.get("uf", {}).get("sigla", ""),
         "mes": reg.get("dataMesReferencia", reg.get("mesReferencia", "")).replace("-", ""),
+        "data_saque": reg.get("dataSaque", ""),
         "valor": reg.get("valorSaque", reg.get("valor", 0))
     }
 

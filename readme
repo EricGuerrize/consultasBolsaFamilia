@@ -1,69 +1,22 @@
-# Cruzamento Servidores × Bolsa Família
+# ⚖️ Consultas Bolsa Família × Servidores Públicos
 
-Aplicativo desktop Python para identificar servidores públicos que constam como beneficiários do Bolsa Família, consultando a API do Portal da Transparência.
+## 🎯 Objetivo do Projeto
+O sistema tem como objetivo principal identificar quais pessoas presentes em uma base de dados local de servidores públicos receberam benefícios do programa Bolsa Família de forma indevida ou para análise de conformidade. Ele automatiza o cruzamento de informações entre arquivos locais (CSV/Excel) e a API oficial do **Portal da Transparência**.
 
-## Requisitos
+## 🛠️ Como será feito
+A solução foi desenvolvida em duas frentes para garantir versatilidade e facilidade de uso:
 
-```
-Python 3.10+
-pandas
-requests
-openpyxl
-ttkthemes  (opcional, melhora a aparência)
-```
+### 1. Motor de Cruzamento (Backend)
+- **API Gov.br**: Consulta em tempo real os saques e disponibilidades do Bolsa Família através dos endpoints oficiais do Governo Federal.
+- **Modos de Busca**:
+    - **Lote (Município)**: Baixa todos os beneficiários de uma cidade específica e cruza com os servidores locais em segundos.
+    - **Individual (CPF)**: Percorre a lista de servidores um a um, buscando o histórico completo de benefícios vinculado a cada CPF.
+- **Processamento**: Escrito em **Python (FastAPI/Pandas)** para garantir velocidade no tratamento de grandes volumes de dados.
 
-Instalar dependências:
-```bash
-pip install pandas requests openpyxl ttkthemes
-```
+### 2. Interface do Usuário (Frontend)
+- **Dashboard Web**: Uma aplicação moderna em **React + Vite** com design focado em usabilidade (*Glassmorphism*).
+- **Relatórios**: Geração automática de relatórios consolidados em tela e exportação direta para arquivos **Excel/CSV**.
+- **Segurança**: Gerenciamento de chaves de API via variáveis de ambiente e persistência local segura.
 
-## Como usar
-
-```bash
-python app.py
-```
-
-### Passo a passo
-
-1. **Aba Configuração → Base de Servidores**
-   - Clique em "Selecionar…" e escolha o arquivo CSV ou Excel
-   - Informe os nomes exatos das colunas de CPF e Nome no arquivo
-   - Clique em "Carregar Arquivo"
-
-2. **Aba Configuração → Consulta à API**
-   - Informe sua chave de API do Portal da Transparência
-     - Obtenha gratuitamente em: https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email
-   - Informe o período no formato AAAAMM (ex: `202403` para março de 2024)
-   - Informe o código IBGE do município a consultar
-     - Sinop/MT: `5107602`
-     - Cuiabá/MT: `5103403`
-   - Clique em "Consultar e Cruzar"
-
-3. **Aba Resultados**
-   - Veja os servidores encontrados na base do Bolsa Família
-   - Use os filtros por nome/CPF, município e UF
-   - Exporte para CSV ou Excel
-
-4. **Aba Relatório**
-   - Resumo consolidado com totais e top 10 maiores saques
-
-## Formato do arquivo de servidores
-
-O arquivo deve conter ao menos as colunas `nome` e `cpf`.
-Colunas opcionais reconhecidas: `matricula`, `cargo`, `orgao`.
-
-O CPF pode estar com ou sem formatação (pontos e traço).
-
-Exemplo: `servidores_exemplo.csv`
-
-## Cache
-
-Os dados consultados na API são salvos em `cache_bolsafamilia.json`.
-Isso evita reconsultar a API para a mesma combinação de período + município.
-Para forçar nova consulta, desmarque "Usar cache local".
-
-## Notas
-
-- A API do Portal da Transparência filtra por município. Para cruzamento estadual, consulte cada município separadamente.
-- O CPF retornado pela API pode estar parcialmente mascarado dependendo do endpoint e da chave utilizada.
-- Resultados são meramente indicativos e devem ser confirmados pelas fontes primárias.
+---
+*Desenvolvido para auditoria, transparência e controle social.*

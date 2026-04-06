@@ -28,8 +28,8 @@ app.add_middleware(
 #  CONSTANTES E AUXILIARES
 # ─────────────────────────────────────────────
 API_BASE = "https://api.portaldatransparencia.gov.br/api-de-dados"
-API_SACADO = f"{API_BASE}/bolsa-familia-sacado-por-municipio"
-API_CPF = f"{API_BASE}/bolsa-familia-disponivel-por-cpf-ou-nis"
+API_SACADO = f"{API_BASE}/novo-bolsa-familia-sacado-beneficiario-por-municipio"
+API_CPF = f"{API_BASE}/novo-bolsa-familia-disponivel-por-cpf-ou-nis"
 PAGE_SIZE = 15
 
 # Estado global temporário (Simulação de DB em memória para este contexto)
@@ -152,7 +152,8 @@ async def start_cross(
     api_key: str = Form(""),
     col_cpf: str = Form("cpf"),
     col_nome: str = Form("nome"),
-    file: UploadFile = File(...)
+    file: Optional[UploadFile] = File(None),
+    json_data: Optional[str] = Form(None)
 ):
     job_id = str(time.time())
     jobs[job_id] = {"status": "processing", "progress": 0, "result": None, "error": None}
@@ -162,10 +163,19 @@ async def start_cross(
     if not real_api_key:
         raise HTTPException(status_code=401, detail="Chave de API não fornecida")
 
-    # Lê o arquivo novamente para o processamento em background
-    content = await file.read()
+    content = None
+    filename = "upload.json"
+    if file:
+        content = await file.read()
+        filename = file.filename
+    elif json_data:
+        content = json_data.encode("utf-8")
+        filename = "input.json"
+    else:
+        raise HTTPException(status_code=400, detail="Nenhum dado enviado (arquivo ou JSON)")
+
     background_tasks.add_task(
-        run_cross_task, job_id, content, file.filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome
+        run_cross_task, job_id, content, filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome
     )
     
     return {"job_id": job_id}
@@ -193,10 +203,13 @@ def get_meses_list(start, end):
 
 def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key, col_cpf, col_nome):
     try:
-        suffix = Path(filename).suffix
+        suffix = Path(filename).suffix.lower()
         from io import BytesIO, StringIO
         if suffix == ".csv":
             df = pd.read_csv(StringIO(content.decode("utf-8-sig")), dtype=str)
+        elif suffix == ".json":
+            data = json.loads(content.decode("utf-8"))
+            df = pd.DataFrame(data)
         else:
             df = pd.read_excel(BytesIO(content), dtype=str)
         
@@ -215,7 +228,7 @@ def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key,
                 # Indexa por chave: 6 dígitos do meio + primeiro nome
                 api_por_chave = {}
                 for r in regs:
-                    bf = r.get("beneficiarioBolsaFamilia", {})
+                    bf = r.get("beneficiarioNovoBolsaFamilia", {})
                     chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
                     if chave:
                         api_por_chave.setdefault(chave, []).append(r)
@@ -237,7 +250,7 @@ def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key,
                     if d_ref not in meses:
                         continue
                     # Valida pelo mesmo critério: meio CPF + primeiro nome
-                    bf = reg.get("beneficiarioBolsaFamilia", {})
+                    bf = reg.get("beneficiarioNovoBolsaFamilia", {})
                     if chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", "")) == \
                        chave_cruzamento(srv["cpf"], srv.get("nome", "")):
                         final_results.append(format_result(srv, reg))
@@ -251,7 +264,7 @@ def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key,
         jobs[job_id]["error"] = str(e)
 
 def format_result(srv, reg):
-    bf = reg.get("beneficiarioBolsaFamilia", {})
+    bf = reg.get("beneficiarioNovoBolsaFamilia", {})
     mun = reg.get("municipio", {})
     return {
         "servidor": srv.get("nome", ""),

@@ -50,6 +50,33 @@ export default function App() {
     return () => clearInterval(interval);
   }, [jobId, status]);
 
+  const parseCSV = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target.result;
+          const rows = text.split(/\r?\n/).filter(line => line.trim());
+          if (rows.length === 0) throw new Error('Arquivo vazio');
+          
+          // Detecta delimitador (vírgula ou ponto-e-vírgula)
+          const firstLine = rows[0];
+          const delims = [',', ';', '\t'];
+          const counts = delims.map(d => firstLine.split(d).length);
+          const maxIdx = counts.indexOf(Math.max(...counts));
+          const sep = delims[maxIdx];
+
+          const headers = firstLine.split(sep).map(h => h.trim().replace(/^"|"$/g, ''));
+          resolve({ headers, sep, total: rows.length - 1, rows });
+        } catch (err) {
+          reject(err);
+        }
+      };
+      reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
+      reader.readAsText(file);
+    });
+  };
+
   const handleFileUpload = async (e) => {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
@@ -59,19 +86,37 @@ export default function App() {
     setError(null);
     setStatus(null);
 
-    const formData = new FormData();
-    formData.append('file', uploadedFile);
-    try {
-      const res = await fetch('/api/upload', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Erro ao ler arquivo');
-      setColumns(data.columns);
-      setFileInfo({ total: data.total, filename: data.filename });
-      const cpfCol = data.columns.find(c => /cpf/i.test(c)) || '';
-      const nomeCol = data.columns.find(c => /^nome|name/i.test(c)) || '';
-      setConfig(prev => ({ ...prev, col_cpf: cpfCol, col_nome: nomeCol }));
-    } catch (err) {
-      setError(err.message);
+    const suffix = uploadedFile.name.split('.').pop().toLowerCase();
+    if (suffix === 'csv') {
+      try {
+        const { headers, total } = await parseCSV(uploadedFile);
+        setColumns(headers);
+        setFileInfo({ total, filename: uploadedFile.name });
+        const cpfCol = headers.find(c => /cpf/i.test(c)) || '';
+        const nomeCol = headers.find(c => /^nome|name|servidor/i.test(c)) || '';
+        setConfig(prev => ({ ...prev, col_cpf: cpfCol, col_nome: nomeCol }));
+      } catch (err) {
+        setError("Erro ao ler CSV: " + err.message);
+      }
+    } else {
+      // Para Excel ainda usamos o backend pra ler colunas (ou o user converte pra CSV)
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      try {
+        const res = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(txt.includes('Request Entity Too Large') ? 'Arquivo muito grande. Tente usar formato CSV.' : 'Erro ao ler arquivo');
+        }
+        const data = await res.json();
+        setColumns(data.columns);
+        setFileInfo({ total: data.total, filename: data.filename });
+        const cpfCol = data.columns.find(c => /cpf/i.test(c)) || '';
+        const nomeCol = data.columns.find(c => /^nome|name|servidor/i.test(c)) || '';
+        setConfig(prev => ({ ...prev, col_cpf: cpfCol, col_nome: nomeCol }));
+      } catch (err) {
+        setError(err.message);
+      }
     }
   };
 
@@ -88,14 +133,43 @@ export default function App() {
     setStatus(null);
     setSearchFilter('');
 
-    const formData = new FormData();
-    formData.append('file', file);
-    Object.keys(config).forEach(key => formData.append(key, config[key]));
-
     try {
+      const formData = new FormData();
+      Object.keys(config).forEach(key => formData.append(key, config[key]));
+
+      const suffix = file.name.split('.').pop().toLowerCase();
+      if (suffix === 'csv') {
+        const { rows, sep, headers } = await parseCSV(file);
+        const cpfIdx = headers.indexOf(config.col_cpf);
+        const nomeIdx = headers.indexOf(config.col_nome);
+        
+        // Extrai apenas as colunas necessárias para reduzir tamanho do payload
+        const dataToSent = rows.slice(1).map(row => {
+          const cells = row.split(sep);
+          return {
+            cpf: cells[cpfIdx]?.replace(/^"|"$/g, ''),
+            nome: nomeIdx !== -1 ? cells[nomeIdx]?.replace(/^"|"$/g, '') : ''
+          };
+        }).filter(r => r.cpf && r.cpf.trim());
+
+        formData.append('json_data', JSON.stringify(dataToSent));
+      } else {
+        formData.append('file', file);
+      }
+
       const res = await fetch('/api/cross', { method: 'POST', body: formData });
+      if (!res.ok) {
+        const txt = await res.text();
+        if (txt.includes('Request Entity Too Large')) throw new Error('Arquivo muito grande para o servidor.');
+        try {
+          const errData = JSON.parse(txt);
+          throw new Error(errData.detail || 'Erro ao iniciar');
+        } catch {
+          throw new Error(txt || 'Erro desconhecido');
+        }
+      }
+      
       const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || 'Erro ao iniciar cruzamento');
       setJobId(data.job_id);
       setStatus({ status: 'processing', progress: 0 });
     } catch (err) {
@@ -239,10 +313,10 @@ export default function App() {
           )}
 
           <div className="input-group">
-            <label>Chave de API (Portal da Transparência)</label>
+            <label>Chave de API (Opcional - lida do servidor se vazia)</label>
             <input
               type="password"
-              placeholder="Sua chave de acesso"
+              placeholder="Chave do Portal da Transparência"
               value={config.api_key}
               onChange={e => setConfig({ ...config, api_key: e.target.value })}
             />

@@ -95,11 +95,11 @@ class BolsaFamiliaAPI:
 #  ENDPOINTS
 # ─────────────────────────────────────────────
 
-@app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "Bolsa Família API"}
 
-@app.post("/upload")
+@app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
         content = await file.read()
@@ -114,7 +114,7 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {str(e)}")
 
-@app.post("/cross")
+@app.post("/api/cross")
 async def start_cross(
     background_tasks: BackgroundTasks,
     m_ini: str = Form(...),
@@ -142,7 +142,7 @@ async def start_cross(
     
     return {"job_id": job_id}
 
-@app.get("/status/{job_id}")
+@app.get("/api/status/{job_id}")
 async def get_status(job_id: str):
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Tarefa não encontrada")

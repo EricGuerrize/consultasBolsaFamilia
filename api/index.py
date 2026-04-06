@@ -48,6 +48,34 @@ def normalizar_cpf(cpf) -> str:
     s = re.sub(r"\D", "", str(cpf))
     return s.zfill(11) if len(s) <= 11 else s[:11]
 
+def meio_cpf(cpf_raw) -> str:
+    """Extrai os 6 dígitos do meio visíveis no formato xxx.YYY.ZZZ-00.
+    CPF local normalizado (11 dígitos): posições 3-8.
+    CPF mascarado da API (xxx.123.456-00): remove x e não-dígitos → pega os 6 primeiros dígitos restantes.
+    """
+    raw = str(cpf_raw or "")
+    # CPF completo normalizado (11 dígitos)
+    digits = re.sub(r"\D", "", raw)
+    if len(digits) == 11:
+        return digits[3:9]
+    # Formato mascarado: remove 'x/X' e não-dígitos
+    digits = re.sub(r"\D", "", re.sub(r"[xX]", "", raw))
+    return digits[:6] if len(digits) >= 6 else ""
+
+def primeiro_nome(nome) -> str:
+    """Retorna o primeiro nome em maiúsculas, sem acentos."""
+    if not nome:
+        return ""
+    return str(nome).strip().split()[0].upper()
+
+def chave_cruzamento(cpf_raw, nome) -> str:
+    """Chave composta: 6 dígitos do meio do CPF + primeiro nome."""
+    meio = meio_cpf(cpf_raw)
+    pnome = primeiro_nome(nome)
+    if not meio or not pnome:
+        return ""
+    return f"{meio}|{pnome}"
+
 # ─────────────────────────────────────────────
 #  CLIENTE API (Reuso da lógica do app.py)
 # ─────────────────────────────────────────────
@@ -184,26 +212,34 @@ def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key,
         if modo == "municipio":
             for i, mes in enumerate(meses):
                 regs = api.buscar_sacados_municipio(mes, ibge)
-                # Cruzamento
-                api_por_cpf = {}
+                # Indexa por chave: 6 dígitos do meio + primeiro nome
+                api_por_chave = {}
                 for r in regs:
-                    c = normalizar_cpf(r.get("beneficiarioBolsaFamilia", {}).get("cpfFormatado", ""))
-                    if c: api_por_cpf.setdefault(c, []).append(r)
-                
+                    bf = r.get("beneficiarioBolsaFamilia", {})
+                    chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
+                    if chave:
+                        api_por_chave.setdefault(chave, []).append(r)
+
                 for _, srv in df.iterrows():
-                    if srv["cpf"] in api_por_cpf:
-                        for reg in api_por_cpf[srv["cpf"]]:
+                    chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
+                    if chave_srv and chave_srv in api_por_chave:
+                        for reg in api_por_chave[chave_srv]:
                             final_results.append(format_result(srv, reg))
-                
+
                 jobs[job_id]["progress"] = int(((i+1)/len(meses)) * 100)
-        
-        else: # MODO CPF
+
+        else: # MODO CPF — busca por CPF completo, valida por chave ao retornar
             servidores = df.to_dict("records")
             for i, srv in enumerate(servidores):
                 regs = api.buscar_por_cpf(srv["cpf"])
                 for reg in regs:
                     d_ref = reg.get("mesReferencia", "").replace("-", "")
-                    if d_ref in meses:
+                    if d_ref not in meses:
+                        continue
+                    # Valida pelo mesmo critério: meio CPF + primeiro nome
+                    bf = reg.get("beneficiarioBolsaFamilia", {})
+                    if chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", "")) == \
+                       chave_cruzamento(srv["cpf"], srv.get("nome", "")):
                         final_results.append(format_result(srv, reg))
                 jobs[job_id]["progress"] = int(((i+1)/len(servidores)) * 100)
 

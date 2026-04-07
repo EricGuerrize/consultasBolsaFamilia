@@ -6,6 +6,7 @@ import pandas as pd
 import requests
 from io import BytesIO, StringIO
 from typing import List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -219,19 +220,26 @@ def do_cross(content, filename, m_ini, m_fim, modo, ibge, api_key, col_cpf, col_
     final_results = []
 
     if modo == "municipio":
-        for mes in meses:
-            regs = api_client.buscar_sacados_municipio(mes, ibge)
-            api_por_chave = {}
+        def buscar_mes(mes):
+            client = BolsaFamiliaAPI(api_key)
+            regs = client.buscar_sacados_municipio(mes, ibge)
+            por_chave = {}
             for r in regs:
                 bf = r.get("beneficiarioNovoBolsaFamilia", {})
                 chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
                 if chave:
-                    api_por_chave.setdefault(chave, []).append(r)
-            for _, srv in df.iterrows():
-                chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
-                if chave_srv and chave_srv in api_por_chave:
-                    for reg in api_por_chave[chave_srv]:
-                        final_results.append(format_result(srv, reg))
+                    por_chave.setdefault(chave, []).append(r)
+            return por_chave
+
+        with ThreadPoolExecutor(max_workers=min(len(meses), 4)) as pool:
+            futures = {pool.submit(buscar_mes, mes): mes for mes in meses}
+            for future in as_completed(futures):
+                api_por_chave = future.result()
+                for _, srv in df.iterrows():
+                    chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
+                    if chave_srv and chave_srv in api_por_chave:
+                        for reg in api_por_chave[chave_srv]:
+                            final_results.append(format_result(srv, reg))
     else:
         meses_set = set(meses)
         for _, srv in df.iterrows():

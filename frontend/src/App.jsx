@@ -81,9 +81,9 @@ export default function App() {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
 
-    const MAX_SIZE = 4 * 1024 * 1024; // 4 MB
+    const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
     if (uploadedFile.size > MAX_SIZE) {
-      setError(`Arquivo muito grande (${(uploadedFile.size / 1024 / 1024).toFixed(1)} MB). O limite é 4 MB.`);
+      setError(`Arquivo muito grande (${(uploadedFile.size / 1024 / 1024).toFixed(1)} MB). O limite é 10 MB.`);
       return;
     }
 

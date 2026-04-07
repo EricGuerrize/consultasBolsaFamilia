@@ -6,7 +6,7 @@ import pandas as pd
 import requests
 from io import BytesIO, StringIO
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
@@ -149,35 +149,40 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {str(e)}")
 
 @app.post("/api/cross")
-async def start_cross(
-    m_ini: str = Form(...),
-    m_fim: str = Form(...),
-    modo: str = Form(...),
-    ibge: str = Form(""),
-    api_key: str = Form(""),
-    col_cpf: str = Form("cpf"),
-    col_nome: str = Form("nome"),
-    file: Optional[UploadFile] = File(None),
-):
-    real_api_key = api_key or os.getenv("CHAVE_API_DADOS", "")
-    if not real_api_key:
-        raise HTTPException(status_code=401, detail="Chave de API não fornecida")
-    if not file:
-        raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
+async def start_cross(request: Request):
+    content_type = request.headers.get("content-type", "")
 
-    content = await file.read()
-    result = do_cross(content, file.filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome)
-    return result
+    real_api_key = None
 
-@app.post("/api/cross/json")
-async def start_cross_json(req: CrossJsonRequest):
-    real_api_key = req.api_key or os.getenv("CHAVE_API_DADOS", "")
-    if not real_api_key:
-        raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+    if "application/json" in content_type:
+        body = await request.json()
+        real_api_key = body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
+        if not real_api_key:
+            raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+        records = body.get("records", [])
+        content = json.dumps(records).encode("utf-8")
+        result = do_cross(
+            content, "input.json",
+            body["m_ini"], body["m_fim"], body["modo"],
+            body.get("ibge", ""), real_api_key,
+            body.get("col_cpf", "cpf"), body.get("col_nome", "nome")
+        )
+    else:
+        form = await request.form()
+        real_api_key = form.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
+        if not real_api_key:
+            raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+        file = form.get("file")
+        if not file:
+            raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
+        content = await file.read()
+        result = do_cross(
+            content, file.filename,
+            form["m_ini"], form["m_fim"], form["modo"],
+            form.get("ibge", ""), real_api_key,
+            form.get("col_cpf", "cpf"), form.get("col_nome", "nome")
+        )
 
-    content = json.dumps(req.records).encode("utf-8")
-    result = do_cross(content, "input.json", req.m_ini, req.m_fim, req.modo,
-                      req.ibge or "", real_api_key, req.col_cpf or "cpf", req.col_nome or "nome")
     return result
 
 # ─────────────────────────────────────────────

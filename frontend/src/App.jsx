@@ -162,7 +162,7 @@ export default function App() {
           };
         }).filter(r => r.cpf && r.cpf.trim());
 
-        res = await fetch('/api/cross/json', {
+        res = await fetch('/api/cross', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -177,6 +177,7 @@ export default function App() {
           }),
         });
       } else {
+        const formData = new FormData();
         Object.keys(config).forEach(key => formData.append(key, config[key]));
         formData.append('file', file);
         res = await fetch('/api/cross', { method: 'POST', body: formData });

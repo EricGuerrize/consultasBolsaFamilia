@@ -6,8 +6,7 @@ import pandas as pd
 import requests
 from io import BytesIO, StringIO
 from typing import List, Optional
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request
+from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
@@ -58,15 +57,15 @@ def normalizar_cpf(cpf) -> str:
 def meio_cpf(cpf_raw) -> str:
     """Extrai os 6 dígitos do meio visíveis no formato xxx.YYY.ZZZ-00.
     CPF local normalizado (11 dígitos): posições 3-8.
-    CPF mascarado da API (xxx.123.456-00): remove x e não-dígitos → pega os 6 primeiros dígitos restantes.
+    CPF mascarado da API (***.123.456-**): remove caracteres não-numéricos e pega os 6 dígitos restantes.
     """
     raw = str(cpf_raw or "")
     # CPF completo normalizado (11 dígitos)
     digits = re.sub(r"\D", "", raw)
     if len(digits) == 11:
         return digits[3:9]
-    # Formato mascarado: remove 'x/X' e não-dígitos
-    digits = re.sub(r"\D", "", re.sub(r"[xX]", "", raw))
+    # Formato mascarado: remove '*', 'x', '.' e '-'
+    digits = re.sub(r"[^\d]", "", raw)
     return digits[:6] if len(digits) >= 6 else ""
 
 def primeiro_nome(nome) -> str:
@@ -94,21 +93,14 @@ class BolsaFamiliaAPI:
             "Accept": "application/json",
         })
 
-    def buscar_sacados_municipio(self, mes_ano: str, codigo_ibge: str) -> list[dict]:
-        resultados = []
-        pagina = 1
-        while True:
-            params = {"mesAno": mes_ano, "codigoIbge": codigo_ibge, "pagina": pagina}
-            r = self.session.get(API_SACADO, params=params, timeout=30)
-            if r.status_code == 429:
-                time.sleep(1); continue
-            r.raise_for_status()
-            data = r.json()
-            if not data: break
-            resultados.extend(data)
-            if len(data) < PAGE_SIZE: break
-            pagina += 1
-        return resultados
+    def buscar_sacados_municipio(self, mes_ano: str, codigo_ibge: str, pagina: int = 1) -> list[dict]:
+        params = {"mesAno": mes_ano, "codigoIbge": codigo_ibge, "pagina": pagina}
+        r = self.session.get(API_SACADO, params=params, timeout=30)
+        if r.status_code == 429:
+            time.sleep(1)
+            return self.buscar_sacados_municipio(mes_ano, codigo_ibge, pagina) # Retry once
+        r.raise_for_status()
+        return r.json() or []
 
     def buscar_por_cpf(self, cpf: str) -> list[dict]:
         resultados = []
@@ -151,7 +143,7 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/api/cross")
 async def start_cross(request: Request):
-    """Processa um único mês — compatível com o limite de 10s do Vercel Hobby."""
+    """Processa um lote de dados — compatível com o limite de 10s do Vercel Hobby."""
     body = await request.json()
     real_api_key = body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
     if not real_api_key:
@@ -159,6 +151,7 @@ async def start_cross(request: Request):
 
     records = body.get("records", [])
     mes = body.get("mes")
+    pagina = body.get("pagina", 1)
     if not mes:
         raise HTTPException(status_code=400, detail="Parâmetro 'mes' obrigatório")
 
@@ -166,7 +159,8 @@ async def start_cross(request: Request):
     return do_cross_mes(
         content, mes, body["modo"],
         body.get("ibge", ""), real_api_key,
-        body.get("col_cpf", "cpf"), body.get("col_nome", "nome")
+        body.get("col_cpf", "cpf"), body.get("col_nome", "nome"),
+        pagina=pagina
     )
 
 # ─────────────────────────────────────────────
@@ -191,14 +185,16 @@ def build_df(content, col_cpf, col_nome):
     df["cpf"] = df["cpf"].apply(normalizar_cpf)
     return df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
 
-def do_cross_mes(content, mes, modo, ibge, api_key, col_cpf, col_nome):
-    """Processa um único mês — projetado para caber no timeout de 10s do Vercel Hobby."""
+def do_cross_mes(content, mes, modo, ibge, api_key, col_cpf, col_nome, pagina=1):
+    """Processa um lote ou uma página — projetado para caber no timeout de 10s do Vercel Hobby."""
     df = build_df(content, col_cpf, col_nome)
     api_client = BolsaFamiliaAPI(api_key)
     results = []
+    has_more = False
 
     if modo == "municipio":
-        regs = api_client.buscar_sacados_municipio(mes, ibge)
+        regs = api_client.buscar_sacados_municipio(mes, ibge, pagina=pagina)
+        has_more = len(regs) >= PAGE_SIZE
         api_por_chave = {}
         for r in regs:
             bf = r.get("beneficiarioNovoBolsaFamilia", {})
@@ -211,6 +207,7 @@ def do_cross_mes(content, mes, modo, ibge, api_key, col_cpf, col_nome):
                 for reg in api_por_chave[chave_srv]:
                     results.append(format_result(srv, reg))
     else:
+        # No modo CPF, o 'df' já vem como um pequeno lote (batch) do frontend
         for _, srv in df.iterrows():
             for reg in api_client.buscar_por_cpf(srv["cpf"]):
                 d_ref = reg.get("mesReferencia", "").replace("-", "")
@@ -221,18 +218,24 @@ def do_cross_mes(content, mes, modo, ibge, api_key, col_cpf, col_nome):
                    chave_cruzamento(srv["cpf"], srv.get("nome", "")):
                     results.append(format_result(srv, reg))
 
-    return {"result": results}
+    return {"result": results, "has_more": has_more}
 
 def format_result(srv, reg):
     bf = reg.get("beneficiarioNovoBolsaFamilia", {})
     mun = reg.get("municipio", {})
+    uf_obj = mun.get("uf", {})
+    # A API parece retornar sigla no lugar do nome e vice-versa em alguns endpoints
+    # Vamos garantir que pegamos o que parece ser a sigla (geralmente 2 letras)
+    sigla = uf_obj.get("nome", "") if len(uf_obj.get("nome", "")) == 2 else uf_obj.get("sigla", "")
+    if len(sigla) > 2: sigla = uf_obj.get("nome", "") # Fallback
+
     return {
         "servidor": srv.get("nome", ""),
         "cpf": srv.get("cpf", ""),
         "beneficiario": bf.get("nome", ""),
         "municipio": mun.get("nomeIBGE", ""),
-        "uf": mun.get("uf", {}).get("sigla", ""),
-        "mes": reg.get("dataMesReferencia", reg.get("mesReferencia", "")).replace("-", ""),
+        "uf": sigla,
+        "mes": (reg.get("dataMesReferencia") or reg.get("mesReferencia", "")).replace("-", "")[:6],
         "data_saque": reg.get("dataSaque", ""),
         "valor": reg.get("valorSaque", reg.get("valor", 0))
     }

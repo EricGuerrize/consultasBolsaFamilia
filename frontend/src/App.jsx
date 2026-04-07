@@ -168,17 +168,14 @@ export default function App() {
     setSearchFilter('');
 
     try {
-      const formData = new FormData();
-      Object.keys(config).forEach(key => formData.append(key, config[key]));
-
       const suffix = file.name.split('.').pop().toLowerCase();
+      let res;
       if (suffix === 'csv') {
         const { rows, sep, headers } = await parseCSV(file);
         const cpfIdx = headers.indexOf(config.col_cpf);
         const nomeIdx = headers.indexOf(config.col_nome);
-        
-        // Extrai apenas as colunas necessárias para reduzir tamanho do payload
-        const dataToSent = rows.slice(1).map(row => {
+
+        const records = rows.slice(1).map(row => {
           const cells = row.split(sep);
           return {
             cpf: cells[cpfIdx]?.replace(/^"|"$/g, ''),
@@ -186,12 +183,26 @@ export default function App() {
           };
         }).filter(r => r.cpf && r.cpf.trim());
 
-        formData.append('json_data', JSON.stringify(dataToSent));
+        res = await fetch('/api/cross/json', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            records,
+            m_ini: config.m_ini,
+            m_fim: config.m_fim,
+            modo: config.modo,
+            ibge: config.ibge,
+            api_key: config.api_key,
+            col_cpf: 'cpf',
+            col_nome: 'nome',
+          }),
+        });
       } else {
+        Object.keys(config).forEach(key => formData.append(key, config[key]));
         formData.append('file', file);
+        res = await fetch('/api/cross', { method: 'POST', body: formData });
       }
 
-      const res = await fetch('/api/cross', { method: 'POST', body: formData });
       if (!res.ok) {
         const txt = await res.text();
         if (txt.includes('Request Entity Too Large')) throw new Error('Arquivo muito grande para o servidor.');

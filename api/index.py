@@ -43,6 +43,16 @@ class CrossRequest(BaseModel):
     modo: str # "cpf" ou "municipio"
     api_key: Optional[str] = ""
 
+class CrossJsonRequest(BaseModel):
+    records: List[dict]
+    m_ini: str
+    m_fim: str
+    modo: str
+    ibge: Optional[str] = ""
+    api_key: Optional[str] = ""
+    col_cpf: Optional[str] = "cpf"
+    col_nome: Optional[str] = "nome"
+
 def normalizar_cpf(cpf) -> str:
     if pd.isna(cpf) or cpf is None: return ""
     s = re.sub(r"\D", "", str(cpf))
@@ -178,6 +188,23 @@ async def start_cross(
         run_cross_task, job_id, content, filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome
     )
     
+    return {"job_id": job_id}
+
+@app.post("/api/cross/json")
+async def start_cross_json(background_tasks: BackgroundTasks, req: CrossJsonRequest):
+    job_id = str(time.time())
+    jobs[job_id] = {"status": "processing", "progress": 0, "result": None, "error": None}
+
+    real_api_key = req.api_key or os.getenv("CHAVE_API_DADOS", "")
+    if not real_api_key:
+        raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+
+    content = json.dumps(req.records).encode("utf-8")
+    background_tasks.add_task(
+        run_cross_task, job_id, content, "input.json",
+        req.m_ini, req.m_fim, req.modo, req.ibge or "",
+        real_api_key, req.col_cpf or "cpf", req.col_nome or "nome"
+    )
     return {"job_id": job_id}
 
 @app.get("/api/status/{job_id}")

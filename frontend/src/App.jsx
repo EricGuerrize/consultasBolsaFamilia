@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Upload, Search, Download, AlertCircle, CheckCircle2,
   ShieldCheck, XCircle, Loader2, Filter, FileText
@@ -14,6 +14,10 @@ export default function App() {
   const [apiHealth, setApiHealth] = useState('checking');
   const [error, setError] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
+  const [municipios, setMunicipios] = useState([]);
+  const [municipioSearch, setMunicipioSearch] = useState('');
+  const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
+  const municipioRef = useRef(null);
   const [config, setConfig] = useState({
     m_ini: '202401',
     m_fim: '202403',
@@ -28,6 +32,29 @@ export default function App() {
     fetch('/api/health')
       .then(r => (r.ok ? setApiHealth('ok') : setApiHealth('error')))
       .catch(() => setApiHealth('error'));
+  }, []);
+
+  useEffect(() => {
+    fetch('https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome')
+      .then(r => r.json())
+      .then(data => {
+        setMunicipios(data.map(m => ({
+          id: String(m.id),
+          nome: m.nome,
+          uf: m.microrregiao?.mesorregiao?.UF?.sigla || '',
+        })));
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (municipioRef.current && !municipioRef.current.contains(e.target)) {
+        setShowMunicipioDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -361,14 +388,57 @@ export default function App() {
           </div>
 
           {config.modo === 'municipio' && (
-            <div className="input-group">
-              <label>Código IBGE do Município</label>
-              <input
-                type="text"
-                placeholder="Ex: 5107602"
-                value={config.ibge}
-                onChange={e => setConfig({ ...config, ibge: e.target.value })}
-              />
+            <div className="input-group" ref={municipioRef}>
+              <label>Município</label>
+              <div className="municipio-combobox">
+                <input
+                  type="text"
+                  placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Buscar município...'}
+                  value={municipioSearch}
+                  disabled={municipios.length === 0}
+                  onChange={e => {
+                    setMunicipioSearch(e.target.value);
+                    setShowMunicipioDropdown(true);
+                    if (!e.target.value) setConfig(prev => ({ ...prev, ibge: '' }));
+                  }}
+                  onFocus={() => setShowMunicipioDropdown(true)}
+                />
+                {config.ibge && (
+                  <span className="municipio-code-badge">{config.ibge}</span>
+                )}
+                {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (
+                  <ul className="municipio-dropdown">
+                    {municipios
+                      .filter(m =>
+                        m.nome.toLowerCase().includes(municipioSearch.toLowerCase()) ||
+                        m.uf.toLowerCase().includes(municipioSearch.toLowerCase()) ||
+                        m.id.includes(municipioSearch)
+                      )
+                      .slice(0, 50)
+                      .map(m => (
+                        <li
+                          key={m.id}
+                          className={config.ibge === m.id ? 'selected' : ''}
+                          onMouseDown={() => {
+                            setConfig(prev => ({ ...prev, ibge: m.id }));
+                            setMunicipioSearch(`${m.nome} - ${m.uf}`);
+                            setShowMunicipioDropdown(false);
+                          }}
+                        >
+                          <span className="municipio-nome">{m.nome}</span>
+                          <span className="municipio-meta">{m.uf} · {m.id}</span>
+                        </li>
+                      ))}
+                    {municipios.filter(m =>
+                      m.nome.toLowerCase().includes(municipioSearch.toLowerCase()) ||
+                      m.uf.toLowerCase().includes(municipioSearch.toLowerCase()) ||
+                      m.id.includes(municipioSearch)
+                    ).length === 0 && (
+                      <li className="municipio-empty">Nenhum município encontrado</li>
+                    )}
+                  </ul>
+                )}
+              </div>
             </div>
           )}
 

@@ -9,7 +9,6 @@ export default function App() {
   const [columns, setColumns] = useState([]);
   const [fileInfo, setFileInfo] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [jobId, setJobId] = useState(null);
   const [status, setStatus] = useState(null);
   const [apiHealth, setApiHealth] = useState('checking');
   const [error, setError] = useState(null);
@@ -56,26 +55,6 @@ export default function App() {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
-
-  useEffect(() => {
-    let interval;
-    if (jobId && status?.status === 'processing') {
-      interval = setInterval(async () => {
-        try {
-          const res = await fetch(`/api/status/${jobId}`);
-          const data = await res.json();
-          setStatus(data);
-          if (data.status === 'completed' || data.status === 'failed') {
-            clearInterval(interval);
-            setLoading(false);
-          }
-        } catch (err) {
-          console.error('Erro ao checar status', err);
-        }
-      }, 2000);
-    }
-    return () => clearInterval(interval);
-  }, [jobId, status]);
 
   const parseCSV = (file) => {
     return new Promise((resolve, reject) => {
@@ -215,8 +194,8 @@ export default function App() {
       }
       
       const data = await res.json();
-      setJobId(data.job_id);
-      setStatus({ status: 'processing', progress: 0 });
+      setStatus(data);
+      setLoading(false);
     } catch (err) {
       setLoading(false);
       setError(err.message);

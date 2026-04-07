@@ -6,7 +6,7 @@ import pandas as pd
 import requests
 from io import BytesIO, StringIO
 from typing import List, Optional
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from pathlib import Path
@@ -31,10 +31,6 @@ API_BASE = "https://api.portaldatransparencia.gov.br/api-de-dados"
 API_SACADO = f"{API_BASE}/novo-bolsa-familia-sacado-beneficiario-por-municipio"
 API_CPF = f"{API_BASE}/novo-bolsa-familia-disponivel-por-cpf-ou-nis"
 PAGE_SIZE = 15
-
-# Estado global temporário (Simulação de DB em memória para este contexto)
-# Em produção real, usar Redis para o status das tarefas
-jobs = {}
 
 class CrossRequest(BaseModel):
     m_ini: str
@@ -154,7 +150,6 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/api/cross")
 async def start_cross(
-    background_tasks: BackgroundTasks,
     m_ini: str = Form(...),
     m_fim: str = Form(...),
     modo: str = Form(...),
@@ -163,55 +158,27 @@ async def start_cross(
     col_cpf: str = Form("cpf"),
     col_nome: str = Form("nome"),
     file: Optional[UploadFile] = File(None),
-    json_data: Optional[str] = Form(None)
 ):
-    job_id = str(time.time())
-    jobs[job_id] = {"status": "processing", "progress": 0, "result": None, "error": None}
-    
-    # Define a chave real (usa do env se não enviada)
     real_api_key = api_key or os.getenv("CHAVE_API_DADOS", "")
     if not real_api_key:
         raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+    if not file:
+        raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
 
-    content = None
-    filename = "upload.json"
-    if file:
-        content = await file.read()
-        filename = file.filename
-    elif json_data:
-        content = json_data.encode("utf-8")
-        filename = "input.json"
-    else:
-        raise HTTPException(status_code=400, detail="Nenhum dado enviado (arquivo ou JSON)")
-
-    background_tasks.add_task(
-        run_cross_task, job_id, content, filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome
-    )
-    
-    return {"job_id": job_id}
+    content = await file.read()
+    result = do_cross(content, file.filename, m_ini, m_fim, modo, ibge, real_api_key, col_cpf, col_nome)
+    return result
 
 @app.post("/api/cross/json")
-async def start_cross_json(background_tasks: BackgroundTasks, req: CrossJsonRequest):
-    job_id = str(time.time())
-    jobs[job_id] = {"status": "processing", "progress": 0, "result": None, "error": None}
-
+async def start_cross_json(req: CrossJsonRequest):
     real_api_key = req.api_key or os.getenv("CHAVE_API_DADOS", "")
     if not real_api_key:
         raise HTTPException(status_code=401, detail="Chave de API não fornecida")
 
     content = json.dumps(req.records).encode("utf-8")
-    background_tasks.add_task(
-        run_cross_task, job_id, content, "input.json",
-        req.m_ini, req.m_fim, req.modo, req.ibge or "",
-        real_api_key, req.col_cpf or "cpf", req.col_nome or "nome"
-    )
-    return {"job_id": job_id}
-
-@app.get("/api/status/{job_id}")
-async def get_status(job_id: str):
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Tarefa não encontrada")
-    return jobs[job_id]
+    result = do_cross(content, "input.json", req.m_ini, req.m_fim, req.modo,
+                      req.ibge or "", real_api_key, req.col_cpf or "cpf", req.col_nome or "nome")
+    return result
 
 # ─────────────────────────────────────────────
 #  TASK WORKER (Lógica de cruzamento)
@@ -228,67 +195,52 @@ def get_meses_list(start, end):
         if curr_m > 12: curr_m = 1; curr_y += 1
     return meses
 
-def run_cross_task(job_id, content, filename, m_ini, m_fim, modo, ibge, api_key, col_cpf, col_nome):
-    try:
-        suffix = Path(filename).suffix.lower()
-        from io import BytesIO, StringIO
-        if suffix == ".csv":
-            df = pd.read_csv(StringIO(content.decode("utf-8-sig")), dtype=str)
-        elif suffix == ".json":
-            data = json.loads(content.decode("utf-8"))
-            df = pd.DataFrame(data)
-        else:
-            df = pd.read_excel(BytesIO(content), dtype=str)
-        
-        df.columns = [c.strip().lower() for c in df.columns]
-        df = df.rename(columns={col_cpf.lower(): "cpf", col_nome.lower(): "nome"})
-        df["cpf"] = df["cpf"].apply(normalizar_cpf)
-        df = df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
-        
-        api = BolsaFamiliaAPI(api_key)
-        meses = get_meses_list(m_ini, m_fim)
-        final_results = []
-        
-        if modo == "municipio":
-            for i, mes in enumerate(meses):
-                regs = api.buscar_sacados_municipio(mes, ibge)
-                # Indexa por chave: 6 dígitos do meio + primeiro nome
-                api_por_chave = {}
-                for r in regs:
-                    bf = r.get("beneficiarioNovoBolsaFamilia", {})
-                    chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
-                    if chave:
-                        api_por_chave.setdefault(chave, []).append(r)
+def do_cross(content, filename, m_ini, m_fim, modo, ibge, api_key, col_cpf, col_nome):
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".csv":
+        df = pd.read_csv(StringIO(content.decode("utf-8-sig")), dtype=str)
+    elif suffix == ".json":
+        df = pd.DataFrame(json.loads(content.decode("utf-8")))
+    else:
+        df = pd.read_excel(BytesIO(content), dtype=str)
 
-                for _, srv in df.iterrows():
-                    chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
-                    if chave_srv and chave_srv in api_por_chave:
-                        for reg in api_por_chave[chave_srv]:
-                            final_results.append(format_result(srv, reg))
+    df.columns = [c.strip().lower() for c in df.columns]
+    df = df.rename(columns={col_cpf.lower(): "cpf", col_nome.lower(): "nome"})
+    df["cpf"] = df["cpf"].apply(normalizar_cpf)
+    df = df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
 
-                jobs[job_id]["progress"] = int(((i+1)/len(meses)) * 100)
+    api_client = BolsaFamiliaAPI(api_key)
+    meses = get_meses_list(m_ini, m_fim)
+    final_results = []
 
-        else: # MODO CPF — busca por CPF completo, valida por chave ao retornar
-            servidores = df.to_dict("records")
-            for i, srv in enumerate(servidores):
-                regs = api.buscar_por_cpf(srv["cpf"])
-                for reg in regs:
-                    d_ref = reg.get("mesReferencia", "").replace("-", "")
-                    if d_ref not in meses:
-                        continue
-                    # Valida pelo mesmo critério: meio CPF + primeiro nome
-                    bf = reg.get("beneficiarioNovoBolsaFamilia", {})
-                    if chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", "")) == \
-                       chave_cruzamento(srv["cpf"], srv.get("nome", "")):
+    if modo == "municipio":
+        for mes in meses:
+            regs = api_client.buscar_sacados_municipio(mes, ibge)
+            api_por_chave = {}
+            for r in regs:
+                bf = r.get("beneficiarioNovoBolsaFamilia", {})
+                chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
+                if chave:
+                    api_por_chave.setdefault(chave, []).append(r)
+            for _, srv in df.iterrows():
+                chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
+                if chave_srv and chave_srv in api_por_chave:
+                    for reg in api_por_chave[chave_srv]:
                         final_results.append(format_result(srv, reg))
-                jobs[job_id]["progress"] = int(((i+1)/len(servidores)) * 100)
+    else:
+        meses_set = set(meses)
+        for _, srv in df.iterrows():
+            regs = api_client.buscar_por_cpf(srv["cpf"])
+            for reg in regs:
+                d_ref = reg.get("mesReferencia", "").replace("-", "")
+                if d_ref not in meses_set:
+                    continue
+                bf = reg.get("beneficiarioNovoBolsaFamilia", {})
+                if chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", "")) == \
+                   chave_cruzamento(srv["cpf"], srv.get("nome", "")):
+                    final_results.append(format_result(srv, reg))
 
-        jobs[job_id]["status"] = "completed"
-        jobs[job_id]["result"] = final_results
-        
-    except Exception as e:
-        jobs[job_id]["status"] = "failed"
-        jobs[job_id]["error"] = str(e)
+    return {"status": "completed", "progress": 100, "result": final_results, "error": None}
 
 def format_result(srv, reg):
     bf = reg.get("beneficiarioNovoBolsaFamilia", {})

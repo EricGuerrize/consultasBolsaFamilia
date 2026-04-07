@@ -139,6 +139,48 @@ export default function App() {
     if (dropped) handleFileUpload({ target: { files: [dropped] } });
   };
 
+  // ── Lógica de cruzamento (executada no browser) ──────────────────
+  const normalizarCPF = (cpf) => {
+    if (!cpf) return '';
+    const d = String(cpf).replace(/\D/g, '');
+    return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11);
+  };
+
+  const meioCPF = (cpfRaw) => {
+    const raw = String(cpfRaw || '');
+    const full = raw.replace(/\D/g, '');
+    if (full.length === 11) return full.slice(3, 9);
+    const masked = raw.replace(/[xX*]/g, '').replace(/\D/g, '');
+    return masked.slice(0, 6);
+  };
+
+  const primeiroNome = (nome) =>
+    nome ? String(nome).trim().split(/\s+/)[0].toUpperCase() : '';
+
+  const chaveJS = (cpfRaw, nome) => {
+    const meio = meioCPF(cpfRaw);
+    const pnome = primeiroNome(nome);
+    return meio && pnome ? `${meio}|${pnome}` : '';
+  };
+
+  const formatResultJS = (srv, reg) => {
+    const bf  = reg.beneficiarioNovoBolsaFamilia || {};
+    const mun = reg.municipio || {};
+    const uf  = mun.uf || {};
+    const sigla = String(uf.sigla || uf.nome || '').slice(0, 2);
+    const mesRaw = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+    return {
+      servidor:    srv.nome || '',
+      cpf:         srv.cpf  || '',
+      beneficiario: bf.nome || '',
+      municipio:   mun.nomeIBGE || '',
+      uf:          sigla,
+      mes:         mesRaw,
+      data_saque:  reg.dataSaque || '',
+      valor:       reg.valorSaque ?? reg.valor ?? 0,
+    };
+  };
+
   const getMesesList = (ini, fim) => {
     const meses = [];
     let [y, m] = [parseInt(ini.slice(0, 4)), parseInt(ini.slice(4))];
@@ -150,6 +192,17 @@ export default function App() {
     return meses;
   };
 
+  const proxyFetch = async (endpoint, params) => {
+    const res = await fetch('/api/proxy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ endpoint, params, api_key: config.api_key }),
+    });
+    if (res.status === 429) { await new Promise(r => setTimeout(r, 1500)); return proxyFetch(endpoint, params); }
+    if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
+    return res.json();
+  };
+
   const startCrossing = async () => {
     if (!file) return;
     setLoading(true);
@@ -159,86 +212,67 @@ export default function App() {
 
     try {
       const { rows, sep, headers } = await parseCSV(file);
-      const cpfIdx = headers.indexOf(config.col_cpf);
+      const cpfIdx  = headers.indexOf(config.col_cpf);
       const nomeIdx = headers.indexOf(config.col_nome);
 
-      const records = rows.slice(1).map(row => {
+      // Normaliza CPFs e monta mapa de cruzamento: chave → [servidor]
+      const serverMap = new Map();
+      rows.slice(1).forEach(row => {
         const cells = row.split(sep);
-        return {
-          cpf: cells[cpfIdx]?.replace(/^"|"$/g, ''),
-          nome: nomeIdx !== -1 ? cells[nomeIdx]?.replace(/^"|"$/g, '') : ''
-        };
-      }).filter(r => r.cpf && r.cpf.trim());
+        const cpf  = normalizarCPF(cells[cpfIdx]?.replace(/^"|"$/g, ''));
+        const nome = nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '';
+        if (!cpf) return;
+        const chave = chaveJS(cpf, nome);
+        if (chave) {
+          if (!serverMap.has(chave)) serverMap.set(chave, []);
+          serverMap.get(chave).push({ cpf, nome });
+        }
+      });
 
       const meses = getMesesList(config.m_ini, config.m_fim);
       const allResults = [];
-      const CHUNK_SIZE = 20;
 
       for (let i = 0; i < meses.length; i++) {
         const mes = meses[i];
-        
+
         if (config.modo === 'municipio') {
           let pagina = 1;
-          let hasMore = true;
-          
-          while (hasMore) {
-            setStatus({ 
-              status: 'processing', 
+          while (true) {
+            setStatus({
+              status: 'processing',
               progress: Math.round((i / meses.length) * 100),
-              message: `Mês ${mes} - Página ${pagina}...`
+              message: `${mes} — página ${pagina}…`,
             });
-
-            const res = await fetch('/api/cross', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                records,
-                mes,
-                pagina,
-                modo: 'municipio',
-                ibge: config.ibge,
-                api_key: config.api_key,
-                col_cpf: 'cpf',
-                col_nome: 'nome',
-              }),
-            });
-
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
-            allResults.push(...(data.result || []));
-            hasMore = data.has_more;
+            const regs = await proxyFetch('municipio', { mesAno: mes, codigoIbge: config.ibge, pagina });
+            for (const reg of regs) {
+              const bf = reg.beneficiarioNovoBolsaFamilia || {};
+              const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
+              if (chave && serverMap.has(chave)) {
+                for (const srv of serverMap.get(chave)) allResults.push(formatResultJS(srv, reg));
+              }
+            }
+            if (regs.length < 15) break;
             pagina++;
-            
-            // Pequeno delay para evitar rate limit
-            await new Promise(r => setTimeout(r, 200));
+            await new Promise(r => setTimeout(r, 150));
           }
         } else {
-          // Modo CPF: Batches
-          const totalChunks = Math.ceil(records.length / CHUNK_SIZE);
-          for (let j = 0; j < totalChunks; j++) {
-            const chunk = records.slice(j * CHUNK_SIZE, (j + 1) * CHUNK_SIZE);
-            setStatus({ 
-              status: 'processing', 
-              progress: Math.round(((i * totalChunks + j) / (meses.length * totalChunks)) * 100),
-              message: `Mês ${mes} - Lote ${j + 1}/${totalChunks}...`
+          // Modo CPF: 1 request por servidor
+          const servidores = [...serverMap.values()].flat();
+          for (let j = 0; j < servidores.length; j++) {
+            const srv = servidores[j];
+            setStatus({
+              status: 'processing',
+              progress: Math.round(((i * servidores.length + j) / (meses.length * servidores.length)) * 100),
+              message: `${mes} — CPF ${j + 1}/${servidores.length}…`,
             });
-
-            const res = await fetch('/api/cross', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                records: chunk,
-                mes,
-                modo: 'cpf',
-                api_key: config.api_key,
-                col_cpf: 'cpf',
-                col_nome: 'nome',
-              }),
-            });
-
-            if (!res.ok) throw new Error(await res.text());
-            const data = await res.json();
-            allResults.push(...(data.result || []));
+            const regs = await proxyFetch('cpf', { cpf: srv.cpf, pagina: 1 });
+            for (const reg of regs) {
+              const mesRef = (reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+              if (mesRef !== mes) continue;
+              const bf = reg.beneficiarioNovoBolsaFamilia || {};
+              if (chaveJS(bf.cpfFormatado || '', bf.nome || '') === chaveJS(srv.cpf, srv.nome))
+                allResults.push(formatResultJS(srv, reg));
+            }
             await new Promise(r => setTimeout(r, 100));
           }
         }
@@ -248,9 +282,7 @@ export default function App() {
       setLoading(false);
     } catch (err) {
       setLoading(false);
-      let msg = err.message;
-      try { msg = JSON.parse(err.message).detail || err.message; } catch {}
-      setError(msg);
+      setError(err.message);
     }
   };
 

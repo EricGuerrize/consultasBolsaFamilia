@@ -172,39 +172,85 @@ export default function App() {
 
       const meses = getMesesList(config.m_ini, config.m_fim);
       const allResults = [];
+      const CHUNK_SIZE = 20;
 
       for (let i = 0; i < meses.length; i++) {
-        setStatus({ status: 'processing', progress: Math.round((i / meses.length) * 100) });
+        const mes = meses[i];
+        
+        if (config.modo === 'municipio') {
+          let pagina = 1;
+          let hasMore = true;
+          
+          while (hasMore) {
+            setStatus({ 
+              status: 'processing', 
+              progress: Math.round((i / meses.length) * 100),
+              message: `Mês ${mes} - Página ${pagina}...`
+            });
 
-        const res = await fetch('/api/cross', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            records,
-            mes: meses[i],
-            modo: config.modo,
-            ibge: config.ibge,
-            api_key: config.api_key,
-            col_cpf: 'cpf',
-            col_nome: 'nome',
-          }),
-        });
+            const res = await fetch('/api/cross', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                records,
+                mes,
+                pagina,
+                modo: 'municipio',
+                ibge: config.ibge,
+                api_key: config.api_key,
+                col_cpf: 'cpf',
+                col_nome: 'nome',
+              }),
+            });
 
-        if (!res.ok) {
-          const txt = await res.text();
-          try { throw new Error(JSON.parse(txt).detail || txt); }
-          catch { throw new Error(txt || 'Erro desconhecido'); }
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            allResults.push(...(data.result || []));
+            hasMore = data.has_more;
+            pagina++;
+            
+            // Pequeno delay para evitar rate limit
+            await new Promise(r => setTimeout(r, 200));
+          }
+        } else {
+          // Modo CPF: Batches
+          const totalChunks = Math.ceil(records.length / CHUNK_SIZE);
+          for (let j = 0; j < totalChunks; j++) {
+            const chunk = records.slice(j * CHUNK_SIZE, (j + 1) * CHUNK_SIZE);
+            setStatus({ 
+              status: 'processing', 
+              progress: Math.round(((i * totalChunks + j) / (meses.length * totalChunks)) * 100),
+              message: `Mês ${mes} - Lote ${j + 1}/${totalChunks}...`
+            });
+
+            const res = await fetch('/api/cross', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                records: chunk,
+                mes,
+                modo: 'cpf',
+                api_key: config.api_key,
+                col_cpf: 'cpf',
+                col_nome: 'nome',
+              }),
+            });
+
+            if (!res.ok) throw new Error(await res.text());
+            const data = await res.json();
+            allResults.push(...(data.result || []));
+            await new Promise(r => setTimeout(r, 100));
+          }
         }
-
-        const data = await res.json();
-        allResults.push(...(data.result || []));
       }
 
       setStatus({ status: 'completed', progress: 100, result: allResults });
       setLoading(false);
     } catch (err) {
       setLoading(false);
-      setError(err.message);
+      let msg = err.message;
+      try { msg = JSON.parse(err.message).detail || err.message; } catch {}
+      setError(msg);
     }
   };
 
@@ -483,7 +529,7 @@ export default function App() {
                 {status?.progress || 0}% concluído
               </p>
               <p style={{ color: 'var(--text-dim)', marginTop: '0.25rem', fontSize: '0.75rem' }}>
-                Consultando API do Portal da Transparência...
+                {status?.message || 'Consultando API do Portal da Transparência...'}
               </p>
             </div>
           )}

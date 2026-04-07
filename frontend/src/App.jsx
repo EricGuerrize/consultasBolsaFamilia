@@ -80,6 +80,13 @@ export default function App() {
   const handleFileUpload = async (e) => {
     const uploadedFile = e.target.files[0];
     if (!uploadedFile) return;
+
+    const MAX_SIZE = 4 * 1024 * 1024; // 4 MB
+    if (uploadedFile.size > MAX_SIZE) {
+      setError(`Arquivo muito grande (${(uploadedFile.size / 1024 / 1024).toFixed(1)} MB). O limite é 4 MB.`);
+      return;
+    }
+
     setFile(uploadedFile);
     setColumns([]);
     setFileInfo(null);

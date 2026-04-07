@@ -139,6 +139,17 @@ export default function App() {
     if (dropped) handleFileUpload({ target: { files: [dropped] } });
   };
 
+  const getMesesList = (ini, fim) => {
+    const meses = [];
+    let [y, m] = [parseInt(ini.slice(0, 4)), parseInt(ini.slice(4))];
+    const [ey, em] = [parseInt(fim.slice(0, 4)), parseInt(fim.slice(4))];
+    while (y < ey || (y === ey && m <= em)) {
+      meses.push(`${y}${String(m).padStart(2, '0')}`);
+      m++; if (m > 12) { m = 1; y++; }
+    }
+    return meses;
+  };
+
   const startCrossing = async () => {
     if (!file) return;
     setLoading(true);
@@ -147,28 +158,30 @@ export default function App() {
     setSearchFilter('');
 
     try {
-      const suffix = file.name.split('.').pop().toLowerCase();
-      let res;
-      if (suffix === 'csv') {
-        const { rows, sep, headers } = await parseCSV(file);
-        const cpfIdx = headers.indexOf(config.col_cpf);
-        const nomeIdx = headers.indexOf(config.col_nome);
+      const { rows, sep, headers } = await parseCSV(file);
+      const cpfIdx = headers.indexOf(config.col_cpf);
+      const nomeIdx = headers.indexOf(config.col_nome);
 
-        const records = rows.slice(1).map(row => {
-          const cells = row.split(sep);
-          return {
-            cpf: cells[cpfIdx]?.replace(/^"|"$/g, ''),
-            nome: nomeIdx !== -1 ? cells[nomeIdx]?.replace(/^"|"$/g, '') : ''
-          };
-        }).filter(r => r.cpf && r.cpf.trim());
+      const records = rows.slice(1).map(row => {
+        const cells = row.split(sep);
+        return {
+          cpf: cells[cpfIdx]?.replace(/^"|"$/g, ''),
+          nome: nomeIdx !== -1 ? cells[nomeIdx]?.replace(/^"|"$/g, '') : ''
+        };
+      }).filter(r => r.cpf && r.cpf.trim());
 
-        res = await fetch('/api/cross', {
+      const meses = getMesesList(config.m_ini, config.m_fim);
+      const allResults = [];
+
+      for (let i = 0; i < meses.length; i++) {
+        setStatus({ status: 'processing', progress: Math.round((i / meses.length) * 100) });
+
+        const res = await fetch('/api/cross', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             records,
-            m_ini: config.m_ini,
-            m_fim: config.m_fim,
+            mes: meses[i],
             modo: config.modo,
             ibge: config.ibge,
             api_key: config.api_key,
@@ -176,26 +189,18 @@ export default function App() {
             col_nome: 'nome',
           }),
         });
-      } else {
-        const formData = new FormData();
-        Object.keys(config).forEach(key => formData.append(key, config[key]));
-        formData.append('file', file);
-        res = await fetch('/api/cross', { method: 'POST', body: formData });
+
+        if (!res.ok) {
+          const txt = await res.text();
+          try { throw new Error(JSON.parse(txt).detail || txt); }
+          catch { throw new Error(txt || 'Erro desconhecido'); }
+        }
+
+        const data = await res.json();
+        allResults.push(...(data.result || []));
       }
 
-      if (!res.ok) {
-        const txt = await res.text();
-        if (txt.includes('Request Entity Too Large')) throw new Error('Arquivo muito grande para o servidor.');
-        try {
-          const errData = JSON.parse(txt);
-          throw new Error(errData.detail || 'Erro ao iniciar');
-        } catch {
-          throw new Error(txt || 'Erro desconhecido');
-        }
-      }
-      
-      const data = await res.json();
-      setStatus(data);
+      setStatus({ status: 'completed', progress: 100, result: allResults });
       setLoading(false);
     } catch (err) {
       setLoading(false);

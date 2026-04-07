@@ -151,40 +151,23 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/api/cross")
 async def start_cross(request: Request):
-    content_type = request.headers.get("content-type", "")
+    """Processa um único mês — compatível com o limite de 10s do Vercel Hobby."""
+    body = await request.json()
+    real_api_key = body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
+    if not real_api_key:
+        raise HTTPException(status_code=401, detail="Chave de API não fornecida")
 
-    real_api_key = None
+    records = body.get("records", [])
+    mes = body.get("mes")
+    if not mes:
+        raise HTTPException(status_code=400, detail="Parâmetro 'mes' obrigatório")
 
-    if "application/json" in content_type:
-        body = await request.json()
-        real_api_key = body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
-        if not real_api_key:
-            raise HTTPException(status_code=401, detail="Chave de API não fornecida")
-        records = body.get("records", [])
-        content = json.dumps(records).encode("utf-8")
-        result = do_cross(
-            content, "input.json",
-            body["m_ini"], body["m_fim"], body["modo"],
-            body.get("ibge", ""), real_api_key,
-            body.get("col_cpf", "cpf"), body.get("col_nome", "nome")
-        )
-    else:
-        form = await request.form()
-        real_api_key = form.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
-        if not real_api_key:
-            raise HTTPException(status_code=401, detail="Chave de API não fornecida")
-        file = form.get("file")
-        if not file:
-            raise HTTPException(status_code=400, detail="Nenhum arquivo enviado")
-        content = await file.read()
-        result = do_cross(
-            content, file.filename,
-            form["m_ini"], form["m_fim"], form["modo"],
-            form.get("ibge", ""), real_api_key,
-            form.get("col_cpf", "cpf"), form.get("col_nome", "nome")
-        )
-
-    return result
+    content = json.dumps(records).encode("utf-8")
+    return do_cross_mes(
+        content, mes, body["modo"],
+        body.get("ibge", ""), real_api_key,
+        body.get("col_cpf", "cpf"), body.get("col_nome", "nome")
+    )
 
 # ─────────────────────────────────────────────
 #  TASK WORKER (Lógica de cruzamento)
@@ -201,59 +184,44 @@ def get_meses_list(start, end):
         if curr_m > 12: curr_m = 1; curr_y += 1
     return meses
 
-def do_cross(content, filename, m_ini, m_fim, modo, ibge, api_key, col_cpf, col_nome):
-    suffix = Path(filename).suffix.lower()
-    if suffix == ".csv":
-        df = pd.read_csv(StringIO(content.decode("utf-8-sig")), dtype=str)
-    elif suffix == ".json":
-        df = pd.DataFrame(json.loads(content.decode("utf-8")))
-    else:
-        df = pd.read_excel(BytesIO(content), dtype=str)
-
+def build_df(content, col_cpf, col_nome):
+    df = pd.DataFrame(json.loads(content.decode("utf-8")))
     df.columns = [c.strip().lower() for c in df.columns]
     df = df.rename(columns={col_cpf.lower(): "cpf", col_nome.lower(): "nome"})
     df["cpf"] = df["cpf"].apply(normalizar_cpf)
-    df = df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
+    return df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
 
+def do_cross_mes(content, mes, modo, ibge, api_key, col_cpf, col_nome):
+    """Processa um único mês — projetado para caber no timeout de 10s do Vercel Hobby."""
+    df = build_df(content, col_cpf, col_nome)
     api_client = BolsaFamiliaAPI(api_key)
-    meses = get_meses_list(m_ini, m_fim)
-    final_results = []
+    results = []
 
     if modo == "municipio":
-        def buscar_mes(mes):
-            client = BolsaFamiliaAPI(api_key)
-            regs = client.buscar_sacados_municipio(mes, ibge)
-            por_chave = {}
-            for r in regs:
-                bf = r.get("beneficiarioNovoBolsaFamilia", {})
-                chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
-                if chave:
-                    por_chave.setdefault(chave, []).append(r)
-            return por_chave
-
-        with ThreadPoolExecutor(max_workers=min(len(meses), 4)) as pool:
-            futures = {pool.submit(buscar_mes, mes): mes for mes in meses}
-            for future in as_completed(futures):
-                api_por_chave = future.result()
-                for _, srv in df.iterrows():
-                    chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
-                    if chave_srv and chave_srv in api_por_chave:
-                        for reg in api_por_chave[chave_srv]:
-                            final_results.append(format_result(srv, reg))
-    else:
-        meses_set = set(meses)
+        regs = api_client.buscar_sacados_municipio(mes, ibge)
+        api_por_chave = {}
+        for r in regs:
+            bf = r.get("beneficiarioNovoBolsaFamilia", {})
+            chave = chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", ""))
+            if chave:
+                api_por_chave.setdefault(chave, []).append(r)
         for _, srv in df.iterrows():
-            regs = api_client.buscar_por_cpf(srv["cpf"])
-            for reg in regs:
+            chave_srv = chave_cruzamento(srv["cpf"], srv.get("nome", ""))
+            if chave_srv and chave_srv in api_por_chave:
+                for reg in api_por_chave[chave_srv]:
+                    results.append(format_result(srv, reg))
+    else:
+        for _, srv in df.iterrows():
+            for reg in api_client.buscar_por_cpf(srv["cpf"]):
                 d_ref = reg.get("mesReferencia", "").replace("-", "")
-                if d_ref not in meses_set:
+                if d_ref != mes:
                     continue
                 bf = reg.get("beneficiarioNovoBolsaFamilia", {})
                 if chave_cruzamento(bf.get("cpfFormatado", ""), bf.get("nome", "")) == \
                    chave_cruzamento(srv["cpf"], srv.get("nome", "")):
-                    final_results.append(format_result(srv, reg))
+                    results.append(format_result(srv, reg))
 
-    return {"status": "completed", "progress": 100, "result": final_results, "error": None}
+    return {"result": results}
 
 def format_result(srv, reg):
     bf = reg.get("beneficiarioNovoBolsaFamilia", {})

@@ -192,13 +192,14 @@ export default function App() {
     return meses;
   };
 
-  const proxyFetch = async (endpoint, params) => {
+  const proxyFetch = async (endpoint, params, retries = 3) => {
     const res = await fetch('/api/proxy', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, params, api_key: config.api_key }),
     });
-    if (res.status === 429) { await new Promise(r => setTimeout(r, 1500)); return proxyFetch(endpoint, params); }
+    if (res.status === 429) { await new Promise(r => setTimeout(r, 1500)); return proxyFetch(endpoint, params, retries); }
+    if (res.status === 504 && retries > 0) { await new Promise(r => setTimeout(r, 2000)); return proxyFetch(endpoint, params, retries - 1); }
     if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
     return res.json();
   };

@@ -20,6 +20,7 @@ export default function App() {
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
   const municipioRef = useRef(null);
   const [modoTeste, setModoTeste] = useState(true);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [config, setConfig] = useState({
     m_ini: '202401',
     m_fim: '202403',
@@ -435,12 +436,6 @@ export default function App() {
               </div>
             )}
 
-            <div className="input-group">
-              <label>Chave de API (Opcional — lida do servidor se vazia)</label>
-              <input type="password" placeholder="Chave do Portal da Transparência"
-                value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })} />
-            </div>
-
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <div className="input-group">
                 <label>Mês Início</label>
@@ -500,6 +495,19 @@ export default function App() {
                     </ul>
                   )}
                 </div>
+              </div>
+            )}
+
+            <button type="button" onClick={() => setShowAdvanced(a => !a)}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.75rem', color: 'var(--text-dim)', textAlign: 'left', padding: '0.25rem 0', marginBottom: '0.25rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <ChevronRight size={12} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+              Configurações avançadas
+            </button>
+            {showAdvanced && (
+              <div className="input-group" style={{ marginBottom: '0.75rem' }}>
+                <label>Chave de API (sobrepõe a do servidor)</label>
+                <input type="password" placeholder="Chave do Portal da Transparência"
+                  value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })} />
               </div>
             )}
 

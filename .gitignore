@@ -17,3 +17,7 @@ dist-ssr/
 Thumbs.db
 .vercel
 .env*.local
+
+# Dados sensíveis e config local
+*.csv
+.claude/

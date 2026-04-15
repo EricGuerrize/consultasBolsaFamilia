@@ -17,6 +17,7 @@ export default function App() {
   const [municipioSearch, setMunicipioSearch] = useState('');
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
   const municipioRef = useRef(null);
+  const [modoTeste, setModoTeste] = useState(true);
   const [config, setConfig] = useState({
     m_ini: '202401',
     m_fim: '202403',
@@ -238,11 +239,12 @@ export default function App() {
 
         if (config.modo === 'municipio') {
           let pagina = 1;
+          const MAX_PAGINAS = modoTeste ? 3 : Infinity;
           while (true) {
             setStatus({
               status: 'processing',
               progress: Math.round((i / meses.length) * 100),
-              message: `${mes} — página ${pagina}…`,
+              message: `${mes} — página ${pagina}${modoTeste ? ' (modo teste)' : ''}…`,
             });
             const regs = await proxyFetch('municipio', { mesAno: mes, codigoIbge: config.ibge, pagina });
             for (const reg of regs) {
@@ -252,13 +254,14 @@ export default function App() {
                 for (const srv of serverMap.get(chave)) allResults.push(formatResultJS(srv, reg));
               }
             }
-            if (regs.length < 15) break;
+            if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
             pagina++;
             await new Promise(r => setTimeout(r, 150));
           }
         } else {
           // Modo CPF: 1 request por servidor
-          const servidores = [...serverMap.values()].flat();
+          const todosServidores = [...serverMap.values()].flat();
+          const servidores = modoTeste ? todosServidores.slice(0, 30) : todosServidores;
           for (let j = 0; j < servidores.length; j++) {
             const srv = servidores[j];
             setStatus({
@@ -516,6 +519,11 @@ export default function App() {
               </div>
             </div>
           )}
+
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', color: modoTeste ? 'var(--warning, #f59e0b)' : 'var(--text-dim)', marginTop: '0.5rem' }}>
+            <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} />
+            Modo Teste {modoTeste ? '(3 págs/mês · 30 CPFs)' : '— desativado (execução completa)'}
+          </label>
 
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }} disabled={!canStart} onClick={startCrossing}>
             {loading

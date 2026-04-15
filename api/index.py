@@ -69,14 +69,22 @@ async def proxy_portal(request: Request):
         r = requests.get(
             url, params=params,
             headers={"chave-api-dados": real_api_key, "Accept": "application/json"},
-            timeout=25,
+            timeout=55,
         )
         if r.status_code == 429:
             raise HTTPException(status_code=429, detail="Rate limit da API do Portal")
-        r.raise_for_status()
-        return r.json() or []
+        if r.status_code >= 400:
+            raise HTTPException(status_code=r.status_code, detail=f"API do Portal retornou {r.status_code}: {r.text[:200]}")
+        try:
+            return r.json() or []
+        except Exception:
+            raise HTTPException(status_code=502, detail="API do Portal retornou resposta inválida")
+    except HTTPException:
+        raise
     except requests.Timeout:
         raise HTTPException(status_code=504, detail="API do Portal não respondeu a tempo")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Erro ao contactar API do Portal: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

@@ -239,7 +239,7 @@ export default function App() {
 
         if (config.modo === 'municipio') {
           let pagina = 1;
-          const MAX_PAGINAS = modoTeste ? 3 : Infinity;
+          const MAX_PAGINAS = modoTeste ? 100 : Infinity;
           while (true) {
             setStatus({
               status: 'processing',
@@ -261,7 +261,7 @@ export default function App() {
         } else {
           // Modo CPF: 1 request por servidor
           const todosServidores = [...serverMap.values()].flat();
-          const servidores = modoTeste ? todosServidores.slice(0, 30) : todosServidores;
+          const servidores = modoTeste ? todosServidores.slice(0, 500) : todosServidores;
           for (let j = 0; j < servidores.length; j++) {
             const srv = servidores[j];
             setStatus({
@@ -522,7 +522,7 @@ export default function App() {
 
           <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.8rem', color: modoTeste ? 'var(--warning, #f59e0b)' : 'var(--text-dim)', marginTop: '0.5rem' }}>
             <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} />
-            Modo Teste {modoTeste ? '(3 págs/mês · 30 CPFs)' : '— desativado (execução completa)'}
+            Modo Teste {modoTeste ? '(100 págs/mês · 500 CPFs)' : '— desativado (execução completa)'}
           </label>
 
           <button className="btn btn-primary" style={{ width: '100%', marginTop: '0.5rem' }} disabled={!canStart} onClick={startCrossing}>

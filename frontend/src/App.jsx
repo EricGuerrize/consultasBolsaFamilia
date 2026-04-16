@@ -151,11 +151,14 @@ export default function App() {
       const { rows, sep, headers } = await parseCSV(file);
       const cpfIdx = headers.indexOf(config.col_cpf), nomeIdx = headers.indexOf(config.col_nome);
       const serverMap = new Map();
+      const cpfsVistos = new Set(); // evita duplicar o mesmo CPF completo
       rows.slice(1).forEach(row => {
         const cells = row.split(sep);
         const cpf = normalizarCPF(cells[cpfIdx]?.replace(/^"|"$/g, ''));
         const nome = nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '';
         if (!cpf) return;
+        if (cpfsVistos.has(cpf)) return; // mesmo CPF já incluído — ignora linha duplicada
+        cpfsVistos.add(cpf);
         const chave = chaveJS(cpf, nome);
         if (chave) { if (!serverMap.has(chave)) serverMap.set(chave, []); serverMap.get(chave).push({ cpf, nome }); }
       });
@@ -220,13 +223,16 @@ export default function App() {
   const groupedResults = useMemo(() => {
     const map = new Map();
     for (const r of filteredResults) {
-      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', ocorrencias: [], totalValor: 0 });
+      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
       const g = map.get(r.cpf);
       if (!g.nis && r.nis) g.nis = r.nis;
+      if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);
       g.totalValor += r.valor || 0;
     }
-    const all = [...map.values()].sort((a, b) => b.ocorrencias.length - a.ocorrencias.length || b.totalValor - a.totalValor);
+    const all = [...map.values()]
+      .map(g => ({ ...g, nisCount: g.nisSet.size }))
+      .sort((a, b) => b.ocorrencias.length - a.ocorrencias.length || b.totalValor - a.totalValor);
     return apenasMultiplos ? all.filter(g => g.ocorrencias.length > 5) : all;
   }, [filteredResults, apenasMultiplos]);
 
@@ -602,7 +608,10 @@ export default function App() {
                                   {g.servidor}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
-                                <td className="td-mono td-dim">{g.nis || '—'}</td>
+                                <td className="td-mono td-dim">
+                                  {g.nis || '—'}
+                                  {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos — possível falso positivo`}>⚠ {g.nisCount} NIS</span>}
+                                </td>
                                 <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
                                 <td className="td-dim">{meses.join(' · ')}</td>
                                 <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>

@@ -183,9 +183,7 @@ export default function App() {
               const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
               if (chave && serverMap.has(chave)) {
                 for (const srv of serverMap.get(chave)) {
-                  const mes = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
-                  // Dedup por: CPF do servidor + mês + data de saque + valor
-                  // Isso elimina duplicatas de vínculos múltiplos sem perder matches legítimos
+                  // usa `mes` do loop externo (YYYYMM garantido) — não cria variável local que sobrescreveria
                   const deduKey = `${srv.cpf}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                   if (seenResults.has(deduKey)) continue;
                   seenResults.add(deduKey);

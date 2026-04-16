@@ -27,6 +27,7 @@ export default function App() {
   const [fase, setFase] = useState('config');
   const [agrupado, setAgrupado] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const [apenasMultiplos, setApenasMultiplos] = useState(false);
   const cancelRef = useRef(false);
 
   useEffect(() => {
@@ -110,13 +111,15 @@ export default function App() {
   const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), pnome = primeiroNome(nome); return meio && pnome ? `${meio}|${pnome}` : ''; };
   const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
 
-  const formatResultJS = (srv, reg) => {
+  const formatResultJS = (srv, reg, pagina = null) => {
     const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
     return {
       servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
+      nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
       municipio: mun.nomeIBGE || '', uf: String(uf.sigla || uf.nome || '').slice(0, 2),
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
+      pagina: pagina,
     };
   };
 
@@ -170,7 +173,7 @@ export default function App() {
             if (cancelRef.current) break;
             setStatus(prev => ({ ...prev, progress: Math.round((i / meses.length) * 100), message: `${fmtMes(mes)} — pág. ${pagina}${modoTeste ? ' · teste' : ''}` }));
             const regs = await proxyFetch('municipio', { mesAno: mes, codigoIbge: config.ibge, pagina });
-            for (const reg of regs) { const bf = reg.beneficiarioNovoBolsaFamilia || {}; const chave = chaveJS(bf.cpfFormatado || '', bf.nome || ''); if (chave && serverMap.has(chave)) for (const srv of serverMap.get(chave)) allResults.push(formatResultJS(srv, reg)); }
+            for (const reg of regs) { const bf = reg.beneficiarioNovoBolsaFamilia || {}; const chave = chaveJS(bf.cpfFormatado || '', bf.nome || ''); if (chave && serverMap.has(chave)) for (const srv of serverMap.get(chave)) allResults.push(formatResultJS(srv, reg, pagina)); }
             flush();
             if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
             pagina++; await new Promise(r => setTimeout(r, 150));
@@ -197,7 +200,7 @@ export default function App() {
   };
 
   const handleCancel = () => { cancelRef.current = true; };
-  const handleReset = () => { cancelRef.current = false; setFase('config'); setStatus(null); setError(null); setSearchFilter(''); setAgrupado(false); setExpandedRows(new Set()); setLoading(false); };
+  const handleReset = () => { cancelRef.current = false; setFase('config'); setStatus(null); setError(null); setSearchFilter(''); setAgrupado(false); setExpandedRows(new Set()); setApenasMultiplos(false); setLoading(false); };
 
   const allResults = status?.result || [];
   const filteredResults = useMemo(() => {
@@ -216,17 +219,24 @@ export default function App() {
 
   const groupedResults = useMemo(() => {
     const map = new Map();
-    for (const r of filteredResults) { if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, ocorrencias: [], totalValor: 0 }); const g = map.get(r.cpf); g.ocorrencias.push(r); g.totalValor += r.valor || 0; }
-    return [...map.values()].sort((a, b) => b.totalValor - a.totalValor);
-  }, [filteredResults]);
+    for (const r of filteredResults) {
+      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', ocorrencias: [], totalValor: 0 });
+      const g = map.get(r.cpf);
+      if (!g.nis && r.nis) g.nis = r.nis;
+      g.ocorrencias.push(r);
+      g.totalValor += r.valor || 0;
+    }
+    const all = [...map.values()].sort((a, b) => b.ocorrencias.length - a.ocorrencias.length || b.totalValor - a.totalValor);
+    return apenasMultiplos ? all.filter(g => g.ocorrencias.length > 5) : all;
+  }, [filteredResults, apenasMultiplos]);
 
   const toggleRow = cpf => setExpandedRows(prev => { const next = new Set(prev); next.has(cpf) ? next.delete(cpf) : next.add(cpf); return next; });
 
   const exportCSV = () => {
     if (!allResults.length) return;
-    const hdrs = ['Servidor', 'CPF', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor'];
+    const hdrs = ['Servidor', 'CPF', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Página'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csv = '\uFEFF' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor].map(esc).join(','))].join('\n');
+    const csv = '\uFEFF' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.pagina ?? ''].map(esc).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     Object.assign(document.createElement('a'), { href: url, download: 'resultados_bolsafamilia.csv' }).click();
     URL.revokeObjectURL(url);
@@ -480,11 +490,18 @@ export default function App() {
               {isProcessing ? 'Processando…' : 'Resultados do cruzamento'}
             </span>
             {allResults.length > 0 && (
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button className={`btn btn-sm ${agrupado ? 'btn-active' : 'btn-ghost'}`}
                   onClick={() => { setAgrupado(a => !a); setExpandedRows(new Set()); }}>
                   <Users size={12} /> {agrupado ? 'Ver todos' : 'Agrupar por servidor'}
                 </button>
+                {agrupado && (
+                  <button className={`btn btn-sm ${apenasMultiplos ? 'btn-danger-ghost btn-active' : 'btn-ghost'}`}
+                    onClick={() => setApenasMultiplos(a => !a)}
+                    title="Exibir apenas servidores com mais de 5 ocorrências">
+                    ⚠ {apenasMultiplos ? 'Todos' : '> 5 ocorrências'}
+                  </button>
+                )}
                 <button className="btn btn-sm btn-primary" onClick={exportCSV}>
                   <Download size={12} /> Exportar CSV
                 </button>
@@ -537,8 +554,9 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
+                        {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
                       <tbody>
                         {filteredResults.map((row, i) => (
@@ -546,11 +564,13 @@ export default function App() {
                             <td className="td-num">{i + 1}</td>
                             <td className="td-bold">{row.servidor}</td>
                             <td className="td-mono">{row.cpf}</td>
+                            <td className="td-mono td-dim">{row.nis || '—'}</td>
                             <td>{row.beneficiario}</td>
                             <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
                             <td className="td-dim">{fmtMes(row.mes)}</td>
                             <td className="td-dim">{row.data_saque || '—'}</td>
                             <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
                           </tr>
                         ))}
                       </tbody>
@@ -564,21 +584,26 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
                       </tr></thead>
                       <tbody>
                         {groupedResults.map(g => {
                           const expanded = expandedRows.has(g.cpf);
                           const meses = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
+                          const alerta = g.ocorrencias.length > 5;
                           return (
                             <React.Fragment key={g.cpf}>
-                              <tr className={`row-group${expanded ? ' open' : ''}`} onClick={() => toggleRow(g.cpf)}>
+                              <tr className={`row-group${expanded ? ' open' : ''}${alerta ? ' row-alert' : ''}`} onClick={() => toggleRow(g.cpf)}>
                                 <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
                                   {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                 </td>
-                                <td className="td-bold">{g.servidor}</td>
+                                <td className="td-bold">
+                                  {alerta && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ {g.ocorrencias.length}×</span>}
+                                  {g.servidor}
+                                </td>
                                 <td className="td-mono">{g.cpf}</td>
-                                <td><span className="badge-count">{g.ocorrencias.length}×</span></td>
+                                <td className="td-mono td-dim">{g.nis || '—'}</td>
+                                <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
                                 <td className="td-dim">{meses.join(' · ')}</td>
                                 <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                               </tr>
@@ -586,8 +611,12 @@ export default function App() {
                                 <tr key={i} className="row-sub">
                                   <td></td>
                                   <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>{o.beneficiario || '—'}</td>
-                                  <td className="td-dim">{o.municipio}{o.uf ? ` / ${o.uf}` : ''}</td>
-                                  <td className="td-dim">{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
+                                  <td className="td-mono td-dim" style={{ fontSize: '0.78rem' }}>{o.nis || '—'}</td>
+                                  <td className="td-dim" style={{ fontSize: '0.78rem' }}>
+                                    {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
+                                    {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
+                                  </td>
+                                  <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
                                   <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                 </tr>
                               ))}

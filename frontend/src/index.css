@@ -265,6 +265,7 @@ body {
 .badge-green { background: rgba(5,150,105,0.12); color: var(--green); border: 1px solid rgba(5,150,105,0.25); }
 .badge-blue { background: rgba(37,99,235,0.1); color: var(--blue); border: 1px solid rgba(37,99,235,0.2); }
 .badge-amber { background: rgba(217,119,6,0.1); color: var(--amber); border: 1px solid rgba(217,119,6,0.2); }
+.badge-red { background: rgba(220,38,38,0.1); color: var(--red); border: 1px solid rgba(220,38,38,0.2); }
 
 /* ── Column mapping ───────────────────────────────────── */
 .mapping-box {
@@ -572,6 +573,9 @@ tbody tr:hover td { background: var(--blue-faint); }
 .row-group { cursor: pointer; }
 .row-group:hover td { background: #f0f7ff !important; }
 .row-group.open td { background: var(--blue-faint); }
+.row-group.row-alert td { background: rgba(220,38,38,0.04); }
+.row-group.row-alert:hover td { background: rgba(220,38,38,0.08) !important; }
+.row-group.row-alert.open td { background: rgba(220,38,38,0.06); }
 
 .row-sub td { background: #fafcff; }
 .row-sub:hover td { background: var(--blue-faint); }
@@ -588,6 +592,23 @@ tbody tr:hover td { background: var(--blue-faint); }
   color: var(--red);
   font-size: 0.72rem;
   font-weight: 700;
+}
+.badge-count-alert {
+  background: rgba(220,38,38,0.18);
+  color: var(--red);
+  border: 1px solid rgba(220,38,38,0.3);
+}
+
+.pagina-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(37,99,235,0.08);
+  color: var(--blue);
+  font-size: 0.68rem;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 /* ── Summary bar ──────────────────────────────────────── */

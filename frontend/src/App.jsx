@@ -17,6 +17,7 @@ export default function App() {
   const [municipios, setMunicipios] = useState([]);
   const [municipioSearch, setMunicipioSearch] = useState('');
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
+  const [filtroUF, setFiltroUF] = useState('MT');
   const municipioRef = useRef(null);
   const [modoTeste, setModoTeste] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -164,6 +165,7 @@ export default function App() {
       });
       const meses = getMesesList(config.m_ini, config.m_fim);
       const allResults = []; let lastFlush = 0;
+      const seenResults = new Set(); // dedup: mesmo servidor + mesma NIS + mesmo mês + mesmo valor
       const flush = (force = false) => {
         if (force || allResults.length - lastFlush >= 5) { setStatus(prev => ({ ...prev, result: [...allResults] })); lastFlush = allResults.length; }
       };
@@ -176,7 +178,20 @@ export default function App() {
             if (cancelRef.current) break;
             setStatus(prev => ({ ...prev, progress: Math.round((i / meses.length) * 100), message: `${fmtMes(mes)} — pág. ${pagina}${modoTeste ? ' · teste' : ''}` }));
             const regs = await proxyFetch('municipio', { mesAno: mes, codigoIbge: config.ibge, pagina });
-            for (const reg of regs) { const bf = reg.beneficiarioNovoBolsaFamilia || {}; const chave = chaveJS(bf.cpfFormatado || '', bf.nome || ''); if (chave && serverMap.has(chave)) for (const srv of serverMap.get(chave)) allResults.push(formatResultJS(srv, reg, pagina)); }
+            for (const reg of regs) {
+              const bf = reg.beneficiarioNovoBolsaFamilia || {};
+              const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
+              if (chave && serverMap.has(chave)) {
+                for (const srv of serverMap.get(chave)) {
+                  const nis = bf.nis || bf.ns || '';
+                  const mes = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+                  const deduKey = `${srv.cpf}|${nis}|${mes}|${reg.valorSaque ?? reg.valor ?? 0}`;
+                  if (seenResults.has(deduKey)) continue;
+                  seenResults.add(deduKey);
+                  allResults.push(formatResultJS(srv, reg, pagina));
+                }
+              }
+            }
             flush();
             if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
             pagina++; await new Promise(r => setTimeout(r, 150));
@@ -188,7 +203,18 @@ export default function App() {
             const srv = servidores[j];
             setStatus(prev => ({ ...prev, progress: Math.round(((i * servidores.length + j) / (meses.length * servidores.length)) * 100), message: `${fmtMes(mes)} — CPF ${j + 1}/${servidores.length}` }));
             const regs = await proxyFetch('cpf', { cpf: srv.cpf, pagina: 1 });
-            for (const reg of regs) { const mesRef = (reg.mesReferencia || '').replace(/-/g, '').slice(0, 6); if (mesRef !== mes) continue; const bf = reg.beneficiarioNovoBolsaFamilia || {}; if (chaveJS(bf.cpfFormatado || '', bf.nome || '') === chaveJS(srv.cpf, srv.nome)) allResults.push(formatResultJS(srv, reg)); }
+            for (const reg of regs) {
+              const mesRef = (reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+              if (mesRef !== mes) continue;
+              const bf = reg.beneficiarioNovoBolsaFamilia || {};
+              if (chaveJS(bf.cpfFormatado || '', bf.nome || '') === chaveJS(srv.cpf, srv.nome)) {
+                const nis = bf.nis || bf.ns || '';
+                const deduKey = `${srv.cpf}|${nis}|${mesRef}|${reg.valorSaque ?? reg.valor ?? 0}`;
+                if (seenResults.has(deduKey)) continue;
+                seenResults.add(deduKey);
+                allResults.push(formatResultJS(srv, reg));
+              }
+            }
             flush(); await new Promise(r => setTimeout(r, 100));
           }
         }
@@ -368,31 +394,49 @@ export default function App() {
 
               {config.modo === 'municipio' && (
                 <div className="field" ref={municipioRef}>
-                  <label>Município</label>
-                  <div className="combobox">
-                    <input type="text"
-                      placeholder={municipios.length === 0 ? 'Carregando...' : 'Buscar município...'}
-                      value={municipioSearch} disabled={municipios.length === 0}
-                      onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
-                      onFocus={() => setShowMunicipioDropdown(true)} />
-                    {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
-                    {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
-                      const q = municipioSearch.toLowerCase();
-                      const filtered = municipios.filter(m => m.nome.toLowerCase().includes(q) || m.uf.toLowerCase().includes(q) || m.id.includes(municipioSearch));
-                      return (
-                        <ul className="combobox-dropdown">
-                          {filtered.length === 0
-                            ? <li className="city-empty">Nenhum município encontrado</li>
-                            : filtered.slice(0, 50).map(m => (
-                              <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
-                                onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(`${m.nome} - ${m.uf}`); setShowMunicipioDropdown(false); }}>
-                                <span className="city-name">{m.nome}</span>
-                                <span className="city-meta">{m.uf} · {m.id}</span>
-                              </li>
-                            ))}
-                        </ul>
-                      );
-                    })()}
+                  <label>Estado (UF) e Município</label>
+                  <div className="field-row" style={{ marginBottom: '0.4rem' }}>
+                    <select
+                      value={filtroUF}
+                      style={{ width: '90px', flexShrink: 0 }}
+                      onChange={e => {
+                        setFiltroUF(e.target.value);
+                        setMunicipioSearch('');
+                        setConfig(p => ({ ...p, ibge: '' }));
+                      }}>
+                      <option value="">Todos</option>
+                      {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
+                        'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
+                        .map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                    </select>
+                    <div className="combobox" style={{ flex: 1 }}>
+                      <input type="text"
+                        placeholder={municipios.length === 0 ? 'Carregando...' : 'Buscar município...'}
+                        value={municipioSearch} disabled={municipios.length === 0}
+                        onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
+                        onFocus={() => setShowMunicipioDropdown(true)} />
+                      {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
+                      {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
+                        const q = municipioSearch.toLowerCase();
+                        const filtered = municipios.filter(m =>
+                          (!filtroUF || m.uf === filtroUF) &&
+                          (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))
+                        );
+                        return (
+                          <ul className="combobox-dropdown">
+                            {filtered.length === 0
+                              ? <li className="city-empty">Nenhum município encontrado{filtroUF ? ` em ${filtroUF}` : ''}</li>
+                              : filtered.slice(0, 50).map(m => (
+                                <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
+                                  onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(`${m.nome} - ${m.uf}`); setShowMunicipioDropdown(false); }}>
+                                  <span className="city-name">{m.nome}</span>
+                                  <span className="city-meta">{m.uf} · {m.id}</span>
+                                </li>
+                              ))}
+                          </ul>
+                        );
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}

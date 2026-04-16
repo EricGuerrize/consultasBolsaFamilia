@@ -152,15 +152,15 @@ export default function App() {
       const { rows, sep, headers } = await parseCSV(file);
       const cpfIdx = headers.indexOf(config.col_cpf), nomeIdx = headers.indexOf(config.col_nome);
       const serverMap = new Map();
-      const cpfsVistos = new Set(); // evita duplicar o mesmo CPF completo
       rows.slice(1).forEach(row => {
         const cells = row.split(sep);
         const cpf = normalizarCPF(cells[cpfIdx]?.replace(/^"|"$/g, ''));
         const nome = nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '';
         if (!cpf) return;
-        if (cpfsVistos.has(cpf)) return; // mesmo CPF já incluído — ignora linha duplicada
-        cpfsVistos.add(cpf);
         const chave = chaveJS(cpf, nome);
+        // Guarda todas as variações de nome do mesmo CPF — necessário pois o CSV
+        // pode ter o mesmo servidor com nomes em ordens diferentes (JOSE CARLOS / CARLOS JOSE)
+        // A deduplicação de resultados é feita pelo seenResults na saída.
         if (chave) { if (!serverMap.has(chave)) serverMap.set(chave, []); serverMap.get(chave).push({ cpf, nome }); }
       });
       const meses = getMesesList(config.m_ini, config.m_fim);
@@ -183,9 +183,10 @@ export default function App() {
               const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
               if (chave && serverMap.has(chave)) {
                 for (const srv of serverMap.get(chave)) {
-                  const nis = bf.nis || bf.ns || '';
                   const mes = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
-                  const deduKey = `${srv.cpf}|${nis}|${mes}|${reg.valorSaque ?? reg.valor ?? 0}`;
+                  // Dedup por: CPF do servidor + mês + data de saque + valor
+                  // Isso elimina duplicatas de vínculos múltiplos sem perder matches legítimos
+                  const deduKey = `${srv.cpf}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                   if (seenResults.has(deduKey)) continue;
                   seenResults.add(deduKey);
                   allResults.push(formatResultJS(srv, reg, pagina));
@@ -208,8 +209,7 @@ export default function App() {
               if (mesRef !== mes) continue;
               const bf = reg.beneficiarioNovoBolsaFamilia || {};
               if (chaveJS(bf.cpfFormatado || '', bf.nome || '') === chaveJS(srv.cpf, srv.nome)) {
-                const nis = bf.nis || bf.ns || '';
-                const deduKey = `${srv.cpf}|${nis}|${mesRef}|${reg.valorSaque ?? reg.valor ?? 0}`;
+                const deduKey = `${srv.cpf}|${mesRef}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                 if (seenResults.has(deduKey)) continue;
                 seenResults.add(deduKey);
                 allResults.push(formatResultJS(srv, reg));

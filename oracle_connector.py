@@ -128,3 +128,36 @@ class OracleConnector:
                 return df
         except Exception as e:
             raise RuntimeError(f"Erro ao conectar ou executar query no Oracle: {e}")
+
+    def test_connection(self):
+        """
+        Testa a conexão com o Oracle executando uma query simples.
+        """
+        if not all([self.user, self.password, self.dsn]):
+            return False, "Credenciais do Oracle não encontradas no arquivo .env"
+
+        try:
+            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn) as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("SELECT 1 FROM DUAL")
+                    res = cursor.fetchone()
+                    if res and res[0] == 1:
+                        return True, "Conexão bem-sucedida!"
+                    else:
+                        return False, "Query de teste retornou resultado inesperado."
+        except Exception as e:
+            return False, f"Erro ao conectar: {e}"
+
+    def execute_query(self, query):
+        """
+        Executa uma query arbitrária e retorna um DataFrame.
+        """
+        if not all([self.user, self.password, self.dsn]):
+            raise ValueError("Credenciais do Oracle não encontradas no arquivo .env")
+
+        try:
+            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn) as connection:
+                df = pd.read_sql(query, connection)
+                return df
+        except Exception as e:
+            raise RuntimeError(f"Erro ao executar query no Oracle: {e}")

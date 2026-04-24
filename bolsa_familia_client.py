@@ -53,12 +53,13 @@ class BolsaFamiliaAPI:
         """Busca todos os saques de um município em um mês (sequencial, página a página)."""
         resultados = []
         pagina = 1
+        retries = 3
         while True:
             if cancel_flag and cancel_flag():
                 break
             params = {"mesAno": mes_ano, "codigoIbge": codigo_ibge, "pagina": pagina}
             try:
-                r = self.session.get(API_SACADO, params=params, timeout=30)
+                r = self.session.get(API_SACADO, params=params, timeout=60)
                 if r.status_code == 429:
                     time.sleep(2)
                     continue
@@ -73,6 +74,10 @@ class BolsaFamiliaAPI:
                     break
                 pagina += 1
             except Exception as e:
+                if retries > 0:
+                    retries -= 1
+                    time.sleep(5)
+                    continue
                 raise RuntimeError(f"Erro na API (Município {mes_ano}): {e}")
         return resultados
 

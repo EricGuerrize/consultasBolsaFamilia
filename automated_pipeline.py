@@ -31,6 +31,14 @@ load_dotenv()
 from oracle_connector import OracleConnector
 from bolsa_familia_client import BolsaFamiliaAPI, normalizar_cpf, formatar_cpf
 
+# Mapeamento IBGE -> Código Entidade Oracle (conforme orgaos.json e APLIC)
+IBGE_TO_ENTIDADE = {
+    "5107602": "1118181",  # Rondonópolis
+    "5100102": "1113216",  # Acorizal
+    "5105101": "1120724",  # Jangada
+    "5105259": "1111319",  # Lucas do Rio Verde
+}
+
 
 # ─────────────────────────────────────────────
 #  HELPERS
@@ -53,13 +61,40 @@ def get_meses(ini: str, fim: str) -> list[str]:
     return meses
 
 
+def normalizar_nome(nome: str) -> str:
+    """Remove acentos, converte para minúsculas e remove espaços extras."""
+    if not nome: return ""
+    import unicodedata
+    nfkd = unicodedata.normalize('NFKD', nome)
+    limpo = "".join([c for c in nfkd if not unicodedata.combining(c)])
+    return limpo.lower().strip()
+
+
+def mascarar_cpf(cpf_raw: str) -> str:
+    """Converte CPF 12345678901 para formatado mascarado ***.456.789-**."""
+    c = normalizar_cpf(cpf_raw)
+    if len(c) != 11: return c
+    return f"***.{c[3:6]}.{c[6:9]}-**"
+
+
 def cruzar_registro(srv: dict, reg: dict) -> dict:
     bf  = reg.get("beneficiarioNovoBolsaFamilia", {})
     mun = reg.get("municipio", {})
     uf  = mun.get("uf", {})
+    # O Portal da Transparência às vezes inverte sigla e nome.
+    # Ex: sigla="MATO GROSSO", nome="MT". Queremos a sigla de 2 letras.
+    uf_val = uf.get("nome", "")
+    if len(uf_val) != 2:
+        uf_val = uf.get("sigla", "")
+    if len(uf_val) > 2:
+        # Se ainda for longo, tenta extrair as iniciais ou um mapeamento simples
+        if "MATO GROSSO" in uf_val.upper(): uf_val = "MT"
+        else: uf_val = uf_val[:2].upper()
+
     data_ref = reg.get("dataMesReferencia", reg.get("mesReferencia", ""))
     if isinstance(data_ref, str):
         data_ref = data_ref.replace("-", "")[:6]
+
     return {
         "Nome Servidor":   srv.get("pess_nome", ""),
         "CPF":             formatar_cpf(normalizar_cpf(srv.get("pess_cpf", ""))),
@@ -69,7 +104,7 @@ def cruzar_registro(srv: dict, reg: dict) -> dict:
         "Nome BF":         bf.get("nome", ""),
         "NIS":             str(bf.get("nis", "")),
         "Município":       mun.get("nomeIBGE", ""),
-        "UF":              uf.get("sigla", ""),
+        "UF":              uf_val,
         "Mês Referência":  data_ref,
         "Data Saque":      reg.get("dataSaque", ""),
         "Valor Saque (R$)": float(reg.get("valorSaque", reg.get("valor", 0)) or 0),
@@ -77,32 +112,47 @@ def cruzar_registro(srv: dict, reg: dict) -> dict:
 
 
 def cruzar_em_massa(df_serv: pd.DataFrame, registros_api: list[dict]) -> list[dict]:
+    """
+    Cruza lista de servidores com lista da API usando (NOME_NORMALIZADO, CPF_MASCARADO) como chave.
+    """
     if not registros_api:
         return []
-
-    # Índice da API por CPF normalizado
-    api_por_cpf: dict[str, list[dict]] = {}
+    
+    # Indexa API por (nome_normalizado, cpf_mascarado)
+    api_por_chave: dict[str, list[dict]] = {}
     for r in registros_api:
         bf = r.get("beneficiarioNovoBolsaFamilia", {})
-        cpf_api = normalizar_cpf(bf.get("cpfFormatado", ""))
-        if cpf_api:
-            api_por_cpf.setdefault(cpf_api, []).append(r)
+        nome_api = normalizar_nome(bf.get("nome", ""))
+        cpf_api  = bf.get("cpfFormatado", "") # Já vem mascarado da API: ***.XXX.XXX-**
+        
+        chave = f"{nome_api}|{cpf_api}"
+        if chave not in api_por_chave:
+            api_por_chave[chave] = []
+        api_por_chave[chave].append(r)
 
-    linhas: list[dict] = []
+    matches: list[dict] = []
     seen: set[str] = set()
+    
+    # Itera servidores
     for _, srv in df_serv.iterrows():
-        cpf_srv = normalizar_cpf(srv.get("pess_cpf", ""))
-        if cpf_srv not in api_por_cpf:
-            continue
-        for reg in api_por_cpf[cpf_srv]:
-            data_ref = reg.get("dataMesReferencia", reg.get("mesReferencia", "")).replace("-", "")[:6]
-            valor    = reg.get("valorSaque", reg.get("valor", 0))
-            key = f"{cpf_srv}|{data_ref}|{reg.get('dataSaque','')}|{valor}"
-            if key in seen:
-                continue
-            seen.add(key)
-            linhas.append(cruzar_registro(srv.to_dict(), reg))
-    return linhas
+        nome_srv = normalizar_nome(srv.get("pess_nome", ""))
+        cpf_srv_masc = mascarar_cpf(srv.get("pess_cpf", ""))
+        
+        chave_srv = f"{nome_srv}|{cpf_srv_masc}"
+        
+        if chave_srv in api_por_chave:
+            for reg_api in api_por_chave[chave_srv]:
+                # Evita duplicatas exatas se houver
+                data_ref = reg_api.get("dataMesReferencia", reg_api.get("mesReferencia", "")).replace("-", "")[:6]
+                valor    = reg_api.get("valorSaque", reg_api.get("valor", 0))
+                unique_key = f"{srv.get('pess_cpf','')}|{data_ref}|{reg_api.get('dataSaque','')}|{valor}"
+                
+                if unique_key in seen:
+                    continue
+                seen.add(unique_key)
+                matches.append(cruzar_registro(srv.to_dict(), reg_api))
+    
+    return matches
 
 
 def salvar_csv_local(registros: list[dict], run_id: str) -> str:
@@ -123,7 +173,7 @@ def main():
         description="Pipeline Servidores × Bolsa Família → Firebase",
         formatter_class=argparse.RawTextHelpFormatter,
     )
-    parser.add_argument("--ibge",      required=True, help="Código IBGE do município (ex: 5107602)")
+    parser.add_argument("--ibge",      nargs="+", required=True, help="Lista de códigos IBGE dos municípios (ex: 5107602 5100102)")
     parser.add_argument("--mes-ini",   required=True, help="Mês início YYYYMM (ex: 202401)")
     parser.add_argument("--mes-fim",   required=True, help="Mês fim   YYYYMM (ex: 202412)")
     parser.add_argument("--exercicio", default="2024", help="Exercício para query Oracle (default: 2024)")
@@ -146,118 +196,117 @@ def main():
 
     log("=" * 60)
     log(f"Pipeline  run_id={run_id}")
-    log(f"IBGE={args.ibge}  Período={args.mes_ini}→{args.mes_fim}  ({len(meses)} mês/meses)")
+    log(f"IBGE={args.ibge}  Periodo={args.mes_ini}->{args.mes_fim}  ({len(meses)} mes/meses)")
     log(f"Workers={args.workers}  Oracle={'não' if args.sem_oracle else 'sim'}  Firebase={'não' if args.sem_firebase else 'sim'}")
     log("=" * 60)
 
     # ── 1. Servidores ─────────────────────────────────────
     log("1/4 · Carregando servidores...")
     if args.sem_oracle:
-        df_serv = pd.read_csv("servidores_2024.csv", dtype=str, sep=";", encoding="utf-8-sig")
-        df_serv.columns = [c.strip().lower() for c in df_serv.columns]
-        # Normaliza colunas para o padrão interno do pipeline
+        df_serv_full_csv = pd.read_csv("servidores_2024.csv", dtype=str, sep=";", encoding="utf-8-sig")
+        df_serv_full_csv.columns = [c.strip().lower() for c in df_serv_full_csv.columns]
+        # Normaliza colunas
         col_map = {}
-        for col in df_serv.columns:
-            if "cpf" in col:
-                col_map[col] = "pess_cpf"
-            elif "nome" in col:
-                col_map[col] = "pess_nome"
-        df_serv = df_serv.rename(columns=col_map)
-        if "pess_matricula" not in df_serv.columns:
-            df_serv["pess_matricula"] = ""
-        if "cfpess_nome" not in df_serv.columns:
-            df_serv["cfpess_nome"] = ""
-        if "org_nome" not in df_serv.columns:
-            df_serv["org_nome"] = ""
+        for col in df_serv_full_csv.columns:
+            if "cpf" in col: col_map[col] = "pess_cpf"
+            elif "nome" in col: col_map[col] = "pess_nome"
+        df_serv_full_csv = df_serv_full_csv.rename(columns=col_map)
     else:
+        oracle = OracleConnector()
+
+    # ── LOOP POR CIDADE ───────────────────────────────────
+    for idx_mun, ibge in enumerate(args.ibge):
+        log("\n" + "=" * 60)
+        log(f"PROCESSANDO MUNICIPIO {idx_mun+1}/{len(args.ibge)}: {ibge}")
+        log("=" * 60)
+
+        # ── 1. Carregar Servidores (Oracle ou CSV) ───────────
+        if args.sem_oracle:
+            df_serv = df_serv_full_csv.copy()
+        else:
+            ent_codigo = IBGE_TO_ENTIDADE.get(ibge)
+            if not ent_codigo:
+                log(f"   AVISO: Codigo entidade nao mapeado para IBGE {ibge}. Usando padrao Rondonopolis.")
+                ent_codigo = "1118181"
+            
+            try:
+                log(f"   Extraindo servidores do Oracle (entidade {ent_codigo})...")
+                df_serv = oracle.get_servidores_data(ent_codigo=ent_codigo, exercicio=args.exercicio)
+                df_serv.columns = [c.lower() for c in df_serv.columns]
+            except Exception as e:
+                log(f"   ERRO Oracle para {ibge}: {e}")
+                continue
+        df_serv["pess_cpf"] = df_serv["pess_cpf"].apply(normalizar_cpf)
+        antes = len(df_serv)
+        df_serv = df_serv[df_serv["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
+        log(f"   {len(df_serv)} servidores unicos.")
+
+        # ── 2. API Bolsa Familia (paralelo) ───────────────────
+        api_key = os.getenv("CHAVE_API_DADOS", "")
+        log(f"2/4 · Buscando API - {len(meses)} mes(es) em paralelo...")
+        api = BolsaFamiliaAPI(api_key)
+
+        def on_mes_concluido(mes: str, total: int):
+            log(f"   [OK] {mes}: {total} registro(s)")
+
         try:
-            oracle = OracleConnector()
-            df_serv = oracle.get_servidores_data(exercicio=args.exercicio)
-            df_serv.columns = [c.lower() for c in df_serv.columns]
+            resultados_por_mes = api.buscar_sacados_municipio_paralelo(
+                meses=meses,
+                codigo_ibge=ibge,
+                max_workers=args.workers,
+                progress_cb=on_mes_concluido,
+            )
         except Exception as e:
-            log(f"ERRO Oracle: {e}")
-            sys.exit(1)
+            log(f"   ERRO API para {ibge}: {e}")
+            continue
 
-    df_serv["pess_cpf"] = df_serv["pess_cpf"].apply(normalizar_cpf)
-    antes = len(df_serv)
-    df_serv = df_serv[df_serv["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
-    log(f"   {len(df_serv)} servidores únicos ({antes - len(df_serv)} duplicatas removidas).")
+        total_api = sum(len(v) for v in resultados_por_mes.values())
+        log(f"   API concluída: {total_api} registro(s).")
 
-    # ── 2. API Bolsa Família (paralelo) ───────────────────
-    api_key = os.getenv("CHAVE_API_DADOS", "")
-    if not api_key:
-        log("ERRO: CHAVE_API_DADOS não definido no .env")
-        sys.exit(1)
+        # ── 3. Cruzamento ─────────────────────────────────────
+        log("3/4 · Cruzando dados...")
+        cidade_resultados: list[dict] = []
+        for mes in meses:
+            regs = resultados_por_mes.get(mes, [])
+            cruzados = cruzar_em_massa(df_serv, regs)
+            cidade_resultados.extend(cruzados)
 
-    log(f"2/4 · Buscando API — {len(meses)} mes(es) em paralelo ({args.workers} workers)...")
-    api = BolsaFamiliaAPI(api_key)
+        log(f"   Total: {len(cidade_resultados)} correspondências.")
 
-    def on_mes_concluido(mes: str, total: int):
-        log(f"   ✓ {mes}: {total} registro(s)")
+        if not cidade_resultados:
+            log(f"   Nenhuma correspondência para {ibge} — pulando upload.")
+            continue
 
-    try:
-        resultados_por_mes = api.buscar_sacados_municipio_paralelo(
-            meses=meses,
-            codigo_ibge=args.ibge,
-            max_workers=args.workers,
-            progress_cb=on_mes_concluido,
-        )
-    except Exception as e:
-        log(f"ERRO API: {e}")
-        sys.exit(1)
-
-    total_api = sum(len(v) for v in resultados_por_mes.values())
-    log(f"   API concluída: {total_api} registro(s) em {len(meses)} mes(es).")
-
-    # ── 3. Cruzamento ─────────────────────────────────────
-    log("3/4 · Cruzando servidores × Bolsa Família...")
-    todos: list[dict] = []
-    for mes in meses:
-        regs = resultados_por_mes.get(mes, [])
-        cruzados = cruzar_em_massa(df_serv, regs)
-        if cruzados:
-            log(f"   {mes}: {len(cruzados)} correspondência(s)")
-        todos.extend(cruzados)
-
-    log(f"   Total: {len(todos)} correspondência(s) encontrada(s).")
-
-    if not todos:
-        log("Nenhuma correspondência — encerrando.")
-        sys.exit(0)
-
-    # ── 4. Firebase ou CSV ────────────────────────────────
-    if args.sem_firebase:
-        log("4/4 · Salvando resultado em CSV local (--sem-firebase)...")
-        path = salvar_csv_local(todos, run_id)
-        log(f"   Arquivo: {path}")
-    else:
-        log("4/4 · Fazendo upload para Firebase...")
-        try:
-            from firebase_connector import FirebaseConnector
-            fb = FirebaseConnector()
-            fb.salvar_metadados_run(run_id, {
-                "ibge":               args.ibge,
-                "mes_ini":            args.mes_ini,
-                "mes_fim":            args.mes_fim,
-                "total_servidores":   int(len(df_serv)),
-                "total_api":          int(total_api),
-                "total_cruzamentos":  int(len(todos)),
-                "status":             "em_andamento",
-                "iniciado_em":        datetime.now().isoformat(),
-            })
-            fb.upload_cruzamento(todos, run_id=run_id)
-            fb.salvar_metadados_run(run_id, {"status": "concluido"})
-            log(f"   Upload OK! Firestore: cruzamentos/{run_id}")
-        except Exception as e:
-            log(f"ERRO Firebase: {e}")
-            # Fallback: salva CSV para não perder os dados
-            path = salvar_csv_local(todos, run_id)
-            log(f"   Fallback CSV salvo em: {path}")
-            sys.exit(1)
+        # ── 4. Firebase ou CSV ────────────────────────────────
+        if args.sem_firebase:
+            path = salvar_csv_local(cidade_resultados, f"{ibge}_{run_id}")
+            log(f"   CSV salvo: {path}")
+        else:
+            log("4/4 · Upload para Firebase...")
+            try:
+                from firebase_connector import FirebaseConnector
+                fb = FirebaseConnector()
+                run_id_mun = f"{ibge}_{run_id}"
+                fb.salvar_metadados_run(run_id_mun, {
+                    "ibge":               ibge,
+                    "mes_ini":            args.mes_ini,
+                    "mes_fim":            args.mes_fim,
+                    "total_servidores":   int(len(df_serv)),
+                    "total_api":          int(total_api),
+                    "total_cruzamentos":  int(len(cidade_resultados)),
+                    "status":             "concluido",
+                    "iniciado_em":        datetime.now().isoformat(),
+                })
+                fb.upload_cruzamento(cidade_resultados, run_id=run_id_mun)
+                log(f"   Upload OK: {run_id_mun}")
+            except Exception as e:
+                log(f"   ERRO Firebase: {e}")
+                path = salvar_csv_local(cidade_resultados, f"{ibge}_{run_id}")
+                log(f"   Fallback CSV: {path}")
 
     elapsed = time.time() - t0
     log("=" * 60)
-    log(f"Pipeline concluído em {elapsed:.1f}s")
+    log(f"Pipeline concluido em {elapsed:.1f}s")
     log("=" * 60)
 
 

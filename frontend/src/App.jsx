@@ -143,11 +143,13 @@ export default function App() {
 
   // ── Formato resultado ────────────────────────
   const formatResultJS = (srv, reg, pagina = null) => {
-    const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
+    // O Portal da Transparência às vezes inverte sigla (Mato Grosso) e nome (MT)
+    const ufAbbr = String(uf.nome || '').length === 2 ? uf.nome : (String(uf.sigla || '').length === 2 ? uf.sigla : String(uf.sigla || '').slice(0, 2));
+    
     return {
       servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
-      municipio: mun.nomeIBGE || '', uf: String(uf.sigla || uf.nome || '').slice(0, 2),
+      municipio: mun.nomeIBGE || '', uf: ufAbbr,
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
       pagina,
@@ -333,8 +335,19 @@ export default function App() {
   const groupedResults = useMemo(() => {
     const map = new Map();
     for (const r of filteredResults) {
-      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
-      const g = map.get(r.cpf);
+      // Agrupamos pela chave (Nome + CPF) para garantir que é o mesmo servidor
+      const key = `${r.servidor}|${r.cpf}`;
+      if (!map.has(key)) {
+        map.set(key, { 
+          servidor: r.servidor, 
+          cpf: r.cpf, 
+          nis: r.nis || '', 
+          nisSet: new Set(), 
+          ocorrencias: [], 
+          totalValor: 0 
+        });
+      }
+      const g = map.get(key);
       if (!g.nis && r.nis) g.nis = r.nis;
       if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);

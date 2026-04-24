@@ -13,9 +13,14 @@ import csv
 import os
 from datetime import datetime
 from pathlib import Path
+import concurrent.futures
 
 import pandas as pd
 import requests
+from oracle_connector import OracleConnector
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ─────────────────────────────────────────────
 #  CONSTANTES
@@ -129,9 +134,10 @@ def cruzar_registro(srv_row, reg) -> dict:
     return {
         "Nome Servidor": srv_row.get("nome", ""),
         "CPF": formatar_cpf(normalizar_cpf(srv_row.get("cpf", ""))),
-        "Matrícula": srv_row.get("matricula", srv_row.get("matrícula", "")),
-        "Cargo": srv_row.get("cargo", ""),
-        "Órgão": srv_row.get("orgao", srv_row.get("órgão", srv_row.get("orgão", ""))),
+        "Matrícula": srv_row.get("matricula", srv_row.get("matrícula", srv_row.get("pess_matricula", ""))),
+        "Cargo": srv_row.get("cargo", srv_row.get("cfpessug_descricao", "")),
+        "Órgão": srv_row.get("orgao", srv_row.get("órgão", srv_row.get("orgão", srv_row.get("org_nome", "")))),
+        "Data Admissão": srv_row.get("data_admissao", srv_row.get("admissao", srv_row.get("data_ingresso", ""))),
         "Nome BF": bf.get("nome", ""),
         "NIS": bf.get("nis", ""),
         "Município": mun.get("nomeIBGE", ""),
@@ -323,7 +329,11 @@ class App(tk.Tk):
 
         self.btn_carregar = ttk.Button(left, text="⬆  Carregar Arquivo",
                                        command=self._carregar_arquivo)
-        self.btn_carregar.grid(row=5, column=0, columnspan=3, pady=(14, 0), sticky="ew")
+        self.btn_carregar.grid(row=5, column=0, columnspan=1, pady=(14, 0), sticky="ew")
+
+        self.btn_oracle = ttk.Button(left, text="⚡  Carga Oracle (Thin)",
+                                     command=self._carregar_oracle)
+        self.btn_oracle.grid(row=5, column=1, columnspan=2, pady=(14, 0), padx=(6,0), sticky="ew")
 
         self.lbl_serv_info = ttk.Label(left, text="Nenhum arquivo carregado.",
                                        foreground="#64748b")
@@ -429,14 +439,14 @@ class App(tk.Tk):
         self.lbl_contagem.pack(side="right", padx=12)
 
         # Tabela
-        cols = ("Nome Servidor", "CPF", "Cargo", "Nome BF", "Município", "UF",
+        cols = ("Nome Servidor", "CPF", "Matrícula", "Cargo", "Órgão", "Data Admissão", "Nome BF", "Município", "UF",
                  "Mês Ref.", "Data Saque", "Valor (R$)")
         frame_tree = ttk.Frame(tab)
         frame_tree.pack(fill="both", expand=True, padx=12, pady=8)
 
         self.tree = ttk.Treeview(frame_tree, columns=cols, show="headings",
                                   selectmode="browse")
-        widths = [160, 120, 110, 160, 130, 40, 90, 100, 90]
+        widths = [160, 110, 80, 110, 130, 90, 160, 110, 30, 70, 90, 80]
         for c, w in zip(cols, widths):
             self.tree.heading(c, text=c, command=lambda _c=c: self._sort_col(_c))
             self.tree.column(c, width=w, anchor="w")
@@ -519,8 +529,48 @@ class App(tk.Tk):
                     + (f" ({dupls} duplicatas removidas)" if dupls else ""))
             self.lbl_serv_info.configure(text=info, foreground="#22c55e")
             self._status(info)
-        except Exception as e:
-            messagebox.showerror("Erro ao carregar arquivo", str(e))
+    def _carregar_oracle(self):
+        self._status("Conectando ao Oracle...")
+        self.btn_oracle.configure(state="disabled")
+        
+        def run_oracle():
+            try:
+                connector = OracleConnector()
+                # Usando os valores padrão ou poderíamos adicionar campos na UI
+                df = connector.get_servidores_data()
+                
+                # Normaliza colunas para o padrão do app
+                # A query já retorna pess_cpf, pess_nome, org_nome, etc.
+                df.columns = [c.strip().lower() for c in df.columns]
+                
+                # Mapeamento automático já que conhecemos a query do Oracle
+                df = df.rename(columns={
+                    "pess_cpf": "cpf", 
+                    "pess_nome": "nome",
+                    "pess_matricula": "matricula",
+                    "cfpessug_descricao": "cargo"
+                })
+                
+                df["cpf"] = df["cpf"].apply(normalizar_cpf)
+                df = df[df["cpf"] != ""]
+                
+                antes = len(df)
+                df = df.drop_duplicates(subset=["cpf"])
+                dupls = antes - len(df)
+                
+                self.df_servidores = df
+                info = (f"✔  {len(df)} servidores carregados via Oracle"
+                        + (f" ({dupls} duplicatas removidas)" if dupls else ""))
+                
+                self.after(0, lambda: self.lbl_serv_info.configure(text=info, foreground="#3b82f6"))
+                self.after(0, lambda: self._status(info))
+            except Exception as e:
+                self.after(0, lambda: messagebox.showerror("Erro Oracle", str(e)))
+                self.after(0, lambda: self._status("Falha na carga Oracle."))
+            finally:
+                self.after(0, lambda: self.btn_oracle.configure(state="normal"))
+
+        threading.Thread(target=run_oracle, daemon=True).start()
 
     def _iniciar_consulta(self):
         if self.df_servidores is None or self.df_servidores.empty:
@@ -604,30 +654,46 @@ class App(tk.Tk):
             else: # modo CPF
                 servidores = self.df_servidores.to_dict("records")
                 total_srv = len(servidores)
-                for i, srv in enumerate(servidores):
-                    if self._cancel: break
-                    cpf_clean = normalizar_cpf(srv["cpf"])
-                    self._status_async(f"Consultando CPF {i+1}/{total_srv}: {srv['nome'][:20]}…")
+                concluidos = 0
+
+                def processa_cpf(srv):
+                    if self._cancel: return srv, []
+                    cpf_cln = normalizar_cpf(srv["cpf"])
+                    key = f"cpf_{cpf_cln}"
                     
-                    # Para CPF, o cache é por CPF
-                    cache_key = f"cpf_{cpf_clean}"
-                    if self.var_usar_cache.get() and cache_key in self.cache:
-                        regs = self.cache[cache_key]
+                    # Leitura em cache é segura (dictionary lookup on CPython)
+                    if self.var_usar_cache.get() and key in self.cache:
+                        res = self.cache[key]
                     else:
-                        regs = api.buscar_por_cpf(cpf_clean)
+                        res = api.buscar_por_cpf(cpf_cln)
                         if not self._cancel:
-                            self.cache[cache_key] = regs
-                            self._save_cache()
-                    
-                    # Filtra registros pelo período solicitado
-                    for r in regs:
-                        # O endpoint de CPF retorna histórico. Filtramos meses.
-                        # dataMesReferencia do endpoint CPF pode vir como "YYYY-MM"
-                        d_ref = r.get("mesReferencia", "").replace("-", "")
-                        if d_ref in meses:
-                            todos_resultados.append(pd.DataFrame([cruzar_registro(srv, r)]))
-                    
-                    self.progress["value"] = ((i + 1) / total_srv) * 100
+                            self.cache[key] = res  # Escrita em dict no modo multi-thread é "safe" o suficiente pelo GIL
+                    return srv, res
+
+                # Executando até 8 consultas simultâneas na API (Isso simula o conceito de dividir tarefas)
+                with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                    futures = {executor.submit(processa_cpf, s): s for s in servidores}
+                    for future in concurrent.futures.as_completed(futures):
+                        if self._cancel:
+                            executor.shutdown(wait=False, cancel_futures=True)
+                            break
+                        
+                        srv, regs = future.result()
+                        concluidos += 1
+                        
+                        # Atualiza barra de progresso em tempo real a cada conclusão
+                        self._status_async(f"Consultando CPF {concluidos}/{total_srv}: {srv.get('nome', '')[:20]}…")
+                        self.after(0, lambda v=(concluidos / total_srv) * 100: self.progress.configure(value=v))
+                        
+                        # Aplica o filtro de mês/Ano igual antes
+                        for r in regs:
+                            d_ref = r.get("mesReferencia", "").replace("-", "")
+                            if d_ref in meses:
+                                todos_resultados.append(pd.DataFrame([cruzar_registro(srv, r)]))
+                
+                # Salvar o cache fisicamente no SSD só acontece depois de buscar todos, para evitar problemas de concorrência com arquivos.
+                if self.var_usar_cache.get() and not self._cancel:
+                    self._save_cache()
 
             if self._cancel:
                 self._status_async("Consulta cancelada.")
@@ -677,7 +743,10 @@ class App(tk.Tk):
             self.tree.insert("", "end", values=(
                 row.get("Nome Servidor", ""),
                 row.get("CPF", ""),
+                row.get("Matrícula", ""),
                 row.get("Cargo", ""),
+                row.get("Órgão", ""),
+                row.get("Data Admissão", ""),
                 row.get("Nome BF", ""),
                 row.get("Município", ""),
                 row.get("UF", ""),

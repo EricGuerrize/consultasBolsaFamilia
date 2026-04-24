@@ -1,36 +1,55 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   Upload, Search, Download, AlertCircle, CheckCircle2,
-  ShieldCheck, XCircle, Loader2, Filter, FileText,
+  ShieldCheck, Loader2, Filter, FileText,
   ChevronDown, ChevronRight, RotateCcw, Users, X, Settings,
+  Database,
 } from 'lucide-react';
 
+// Número de meses buscados em paralelo (par/ímpar simultâneos)
+const PARALLEL_WORKERS = 3;
+
 export default function App() {
+  // ── Fonte dos servidores ─────────────────────
+  const [fonteServidores, setFonteServidores] = useState('oracle'); // 'oracle' | 'csv'
+  const [oracleConfig, setOracleConfig] = useState({ ent_codigo: '1118181', exercicio: '2024' });
+  const [oracleInfo, setOracleInfo] = useState(null); // { total } depois de carregar
+
+  // ── Arquivo CSV (fonte alternativa) ──────────
   const [file, setFile] = useState(null);
   const [columns, setColumns] = useState([]);
   const [fileInfo, setFileInfo] = useState(null);
+
+  // ── Estado geral ─────────────────────────────
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState(null);
   const [apiHealth, setApiHealth] = useState('checking');
   const [error, setError] = useState(null);
   const [searchFilter, setSearchFilter] = useState('');
+
+  // ── Seletor de município ─────────────────────
   const [municipios, setMunicipios] = useState([]);
   const [municipioSearch, setMunicipioSearch] = useState('');
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
   const [filtroUF, setFiltroUF] = useState('MT');
   const municipioRef = useRef(null);
+
+  // ── Config consulta ──────────────────────────
   const [modoTeste, setModoTeste] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [config, setConfig] = useState({
     m_ini: '202401', m_fim: '202403',
     modo: 'municipio', ibge: '', api_key: '', col_cpf: '', col_nome: '',
   });
+
+  // ── Resultados ───────────────────────────────
   const [fase, setFase] = useState('config');
   const [agrupado, setAgrupado] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [apenasMultiplos, setApenasMultiplos] = useState(false);
   const cancelRef = useRef(false);
 
+  // ── Health checks ────────────────────────────
   useEffect(() => {
     fetch('/api/health')
       .then(r => r.ok ? setApiHealth('ok') : setApiHealth('error'))
@@ -53,6 +72,22 @@ export default function App() {
     return () => document.removeEventListener('mousedown', h);
   }, []);
 
+  // ── Utilitários ──────────────────────────────
+  const normalizarCPF = cpf => { if (!cpf) return ''; const d = String(cpf).replace(/\D/g, ''); return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11); };
+  const meioCPF = cpfRaw => { const raw = String(cpfRaw || ''); const full = raw.replace(/\D/g, ''); if (full.length === 11) return full.slice(3, 9); return raw.replace(/[xX*]/g, '').replace(/\D/g, '').slice(0, 6); };
+  const primeiroNome = nome => nome ? String(nome).trim().split(/\s+/)[0].toUpperCase() : '';
+  const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), pnome = primeiroNome(nome); return meio && pnome ? `${meio}|${pnome}` : ''; };
+  const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
+  const delay = ms => new Promise(r => setTimeout(r, ms));
+
+  const getMesesList = (ini, fim) => {
+    const meses = []; let [y, m] = [parseInt(ini.slice(0, 4)), parseInt(ini.slice(4))];
+    const [ey, em] = [parseInt(fim.slice(0, 4)), parseInt(fim.slice(4))];
+    while (y < ey || (y === ey && m <= em)) { meses.push(`${y}${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } }
+    return meses;
+  };
+
+  // ── Parsing CSV ──────────────────────────────
   const parseCSV = f => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -84,7 +119,7 @@ export default function App() {
         setConfig(prev => ({
           ...prev,
           col_cpf: headers.find(c => /cpf/i.test(c)) || '',
-          col_nome: headers.find(c => /^nome|name|servidor/i.test(c)) || '',
+          col_nome: headers.find(c => /nome/i.test(c)) || '',
         }));
       } catch (err) { setError('Erro ao ler CSV: ' + err.message); }
     } else {
@@ -98,7 +133,7 @@ export default function App() {
         setConfig(prev => ({
           ...prev,
           col_cpf: data.columns.find(c => /cpf/i.test(c)) || '',
-          col_nome: data.columns.find(c => /^nome|name|servidor/i.test(c)) || '',
+          col_nome: data.columns.find(c => /nome/i.test(c)) || '',
         }));
       } catch (err) { setError(err.message); }
     }
@@ -106,12 +141,7 @@ export default function App() {
 
   const handleDrop = e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFileUpload({ target: { files: [f] } }); };
 
-  const normalizarCPF = cpf => { if (!cpf) return ''; const d = String(cpf).replace(/\D/g, ''); return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11); };
-  const meioCPF = cpfRaw => { const raw = String(cpfRaw || ''); const full = raw.replace(/\D/g, ''); if (full.length === 11) return full.slice(3, 9); return raw.replace(/[xX*]/g, '').replace(/\D/g, '').slice(0, 6); };
-  const primeiroNome = nome => nome ? String(nome).trim().split(/\s+/)[0].toUpperCase() : '';
-  const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), pnome = primeiroNome(nome); return meio && pnome ? `${meio}|${pnome}` : ''; };
-  const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
-
+  // ── Formato resultado ────────────────────────
   const formatResultJS = (srv, reg, pagina = null) => {
     const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
     return {
@@ -120,70 +150,91 @@ export default function App() {
       municipio: mun.nomeIBGE || '', uf: String(uf.sigla || uf.nome || '').slice(0, 2),
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
-      pagina: pagina,
+      pagina,
     };
   };
 
-  const getMesesList = (ini, fim) => {
-    const meses = []; let [y, m] = [parseInt(ini.slice(0, 4)), parseInt(ini.slice(4))];
-    const [ey, em] = [parseInt(fim.slice(0, 4)), parseInt(fim.slice(4))];
-    while (y < ey || (y === ey && m <= em)) { meses.push(`${y}${String(m).padStart(2, '0')}`); m++; if (m > 12) { m = 1; y++; } }
-    return meses;
-  };
-
+  // ── Proxy API Portal da Transparência ────────
   const proxyFetch = async (endpoint, params, retries = 3) => {
     const res = await fetch('/api/proxy', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, params, api_key: config.api_key }),
     });
-    if (res.status === 429) { await new Promise(r => setTimeout(r, 2000)); return proxyFetch(endpoint, params, retries); }
-    if ((res.status === 502 || res.status === 504) && retries > 0) { await new Promise(r => setTimeout(r, 3000)); return proxyFetch(endpoint, params, retries - 1); }
+    if (res.status === 429) { await delay(2000); return proxyFetch(endpoint, params, retries); }
+    if ((res.status === 502 || res.status === 504) && retries > 0) { await delay(3000); return proxyFetch(endpoint, params, retries - 1); }
     if (!res.ok) { const t = await res.text(); let msg = t; try { msg = JSON.parse(t)?.detail || t; } catch {} throw new Error(msg); }
     return res.json();
   };
 
+  // ── Constrói serverMap (Oracle ou CSV) ───────
+  const buildServerMap = async () => {
+    const map = new Map();
+    const add = (cpfRaw, nome) => {
+      const cpf = normalizarCPF(cpfRaw);
+      if (!cpf) return;
+      const chave = chaveJS(cpf, nome);
+      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome }); }
+    };
+
+    if (fonteServidores === 'oracle') {
+      setStatus(prev => ({ ...prev, message: 'Carregando servidores do Oracle...' }));
+      const res = await fetch('/api/servidores', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(oracleConfig),
+      });
+      if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
+      const { servidores, total } = await res.json();
+      setOracleInfo({ total });
+      servidores.forEach(s => add(s.cpf, s.nome));
+      return { serverMap: map, totalServidores: total };
+    } else {
+      const { rows, sep, headers } = await parseCSV(file);
+      const cpfIdx = headers.indexOf(config.col_cpf);
+      const nomeIdx = headers.indexOf(config.col_nome);
+      rows.slice(1).forEach(row => {
+        const cells = row.split(sep);
+        add(cells[cpfIdx]?.replace(/^"|"$/g, ''), nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '');
+      });
+      return { serverMap: map, totalServidores: rows.length - 1 };
+    }
+  };
+
+  // ── Cruzamento principal ──────────────────────
   const startCrossing = async () => {
-    if (!file) return;
+    if (fonteServidores === 'csv' && !file) return;
     setLoading(true); setError(null);
     setStatus({ status: 'processing', progress: 0, result: [], message: 'Iniciando...' });
     setFase('processing'); setSearchFilter(''); setAgrupado(false); setExpandedRows(new Set());
     cancelRef.current = false;
+
     try {
-      const { rows, sep, headers } = await parseCSV(file);
-      const cpfIdx = headers.indexOf(config.col_cpf), nomeIdx = headers.indexOf(config.col_nome);
-      const serverMap = new Map();
-      rows.slice(1).forEach(row => {
-        const cells = row.split(sep);
-        const cpf = normalizarCPF(cells[cpfIdx]?.replace(/^"|"$/g, ''));
-        const nome = nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '';
-        if (!cpf) return;
-        const chave = chaveJS(cpf, nome);
-        // Guarda todas as variações de nome do mesmo CPF — necessário pois o CSV
-        // pode ter o mesmo servidor com nomes em ordens diferentes (JOSE CARLOS / CARLOS JOSE)
-        // A deduplicação de resultados é feita pelo seenResults na saída.
-        if (chave) { if (!serverMap.has(chave)) serverMap.set(chave, []); serverMap.get(chave).push({ cpf, nome }); }
-      });
+      // 1. Carrega servidores (Oracle ou CSV)
+      const { serverMap, totalServidores } = await buildServerMap();
+      if (!serverMap.size) throw new Error('Nenhum servidor carregado — verifique a fonte de dados.');
+
       const meses = getMesesList(config.m_ini, config.m_fim);
-      const allResults = []; let lastFlush = 0;
-      const seenResults = new Set(); // dedup: mesmo servidor + mesma NIS + mesmo mês + mesmo valor
-      const flush = (force = false) => {
-        if (force || allResults.length - lastFlush >= 5) { setStatus(prev => ({ ...prev, result: [...allResults] })); lastFlush = allResults.length; }
-      };
-      for (let i = 0; i < meses.length; i++) {
-        if (cancelRef.current) break;
-        const mes = meses[i];
-        if (config.modo === 'municipio') {
-          let pagina = 1; const MAX_PAGINAS = modoTeste ? 100 : Infinity;
+      const allResults = [];
+      const seenResults = new Set();
+      let mesesConcluidos = 0;
+
+      const flush = () => setStatus(prev => ({ ...prev, result: [...allResults] }));
+
+      // 2. Busca paralela por município ─────────
+      if (config.modo === 'municipio') {
+        const MAX_PAGINAS = modoTeste ? 100 : Infinity;
+
+        // Busca todas as páginas de UM mês
+        const fetchMes = async mes => {
+          if (cancelRef.current) return;
+          let pagina = 1;
           while (true) {
             if (cancelRef.current) break;
-            setStatus(prev => ({ ...prev, progress: Math.round((i / meses.length) * 100), message: `${fmtMes(mes)} — pág. ${pagina}${modoTeste ? ' · teste' : ''}` }));
             const regs = await proxyFetch('municipio', { mesAno: mes, codigoIbge: config.ibge, pagina });
             for (const reg of regs) {
               const bf = reg.beneficiarioNovoBolsaFamilia || {};
               const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
               if (chave && serverMap.has(chave)) {
                 for (const srv of serverMap.get(chave)) {
-                  // usa `mes` do loop externo (YYYYMM garantido) — não cria variável local que sobrescreveria
                   const deduKey = `${srv.cpf}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                   if (seenResults.has(deduKey)) continue;
                   seenResults.add(deduKey);
@@ -193,14 +244,42 @@ export default function App() {
             }
             flush();
             if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
-            pagina++; await new Promise(r => setTimeout(r, 150));
+            pagina++;
+            await delay(150);
           }
-        } else {
-          const todos = [...serverMap.values()].flat(), servidores = modoTeste ? todos.slice(0, 500) : todos;
+          mesesConcluidos++;
+          setStatus(prev => ({
+            ...prev,
+            progress: Math.round((mesesConcluidos / meses.length) * 100),
+            message: `${mesesConcluidos}/${meses.length} meses concluídos`,
+          }));
+        };
+
+        // Processa em lotes de PARALLEL_WORKERS (par e ímpar simultâneos)
+        for (let i = 0; i < meses.length; i += PARALLEL_WORKERS) {
+          if (cancelRef.current) break;
+          const lote = meses.slice(i, i + PARALLEL_WORKERS);
+          setStatus(prev => ({
+            ...prev,
+            message: `Buscando em paralelo: ${lote.map(fmtMes).join(' · ')}`,
+          }));
+          await Promise.all(lote.map(mes => fetchMes(mes)));
+        }
+
+      // 3. Busca sequencial por CPF ─────────────
+      } else {
+        const todos = [...serverMap.values()].flat();
+        const servidores = modoTeste ? todos.slice(0, 500) : todos;
+        for (let i = 0; i < meses.length; i++) {
+          const mes = meses[i];
           for (let j = 0; j < servidores.length; j++) {
             if (cancelRef.current) break;
             const srv = servidores[j];
-            setStatus(prev => ({ ...prev, progress: Math.round(((i * servidores.length + j) / (meses.length * servidores.length)) * 100), message: `${fmtMes(mes)} — CPF ${j + 1}/${servidores.length}` }));
+            setStatus(prev => ({
+              ...prev,
+              progress: Math.round(((i * servidores.length + j) / (meses.length * servidores.length)) * 100),
+              message: `${fmtMes(mes)} — CPF ${j + 1}/${servidores.length}`,
+            }));
             const regs = await proxyFetch('cpf', { cpf: srv.cpf, pagina: 1 });
             for (const reg of regs) {
               const mesRef = (reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
@@ -213,11 +292,12 @@ export default function App() {
                 allResults.push(formatResultJS(srv, reg));
               }
             }
-            flush(); await new Promise(r => setTimeout(r, 100));
+            flush(); await delay(100);
           }
         }
       }
-      flush(true);
+
+      flush();
       setStatus(prev => ({ ...prev, status: cancelRef.current ? 'cancelled' : 'completed', progress: 100 }));
       setFase('done'); setLoading(false);
     } catch (err) {
@@ -227,8 +307,14 @@ export default function App() {
   };
 
   const handleCancel = () => { cancelRef.current = true; };
-  const handleReset = () => { cancelRef.current = false; setFase('config'); setStatus(null); setError(null); setSearchFilter(''); setAgrupado(false); setExpandedRows(new Set()); setApenasMultiplos(false); setLoading(false); };
+  const handleReset = () => {
+    cancelRef.current = false;
+    setFase('config'); setStatus(null); setError(null); setSearchFilter('');
+    setAgrupado(false); setExpandedRows(new Set()); setApenasMultiplos(false); setLoading(false);
+    setOracleInfo(null);
+  };
 
+  // ── Dados derivados ──────────────────────────
   const allResults = status?.result || [];
   const filteredResults = useMemo(() => {
     if (!searchFilter) return allResults;
@@ -236,7 +322,7 @@ export default function App() {
     return allResults.filter(r => r.servidor?.toLowerCase().includes(q) || r.cpf?.includes(q) || r.municipio?.toLowerCase().includes(q) || r.beneficiario?.toLowerCase().includes(q));
   }, [allResults, searchFilter]);
 
-  const totalValue = useMemo(() => allResults.reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
+  const totalValue   = useMemo(() => allResults.reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
   const uniqueServers = useMemo(() => new Set(allResults.map(r => r.cpf)).size, [allResults]);
   const topMes = useMemo(() => {
     const counts = {}; for (const r of allResults) counts[r.mes] = (counts[r.mes] || 0) + 1;
@@ -266,19 +352,28 @@ export default function App() {
     if (!allResults.length) return;
     const hdrs = ['Servidor', 'CPF', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Página'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csv = '\uFEFF' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.pagina ?? ''].map(esc).join(','))].join('\n');
+    const csv = '﻿' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.pagina ?? ''].map(esc).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     Object.assign(document.createElement('a'), { href: url, download: 'resultados_bolsafamilia.csv' }).click();
     URL.revokeObjectURL(url);
   };
 
-  const canStart = file && !loading && config.col_cpf && (config.modo !== 'municipio' || config.ibge);
+  // canStart: Oracle precisa só do ibge; CSV precisa do arquivo + col_cpf
+  const canStart = !loading && (config.modo !== 'municipio' || config.ibge) && (
+    fonteServidores === 'oracle'
+      ? true
+      : (file && config.col_cpf)
+  );
+
   const labelPeriodo = `${fmtMes(config.m_ini)} – ${fmtMes(config.m_fim)}`;
-  const labelLocal = config.modo === 'municipio' ? (municipioSearch || config.ibge || '—') : 'Por CPF';
+  const labelLocal   = config.modo === 'municipio' ? (municipioSearch || config.ibge || '—') : 'Por CPF';
+  const labelFonte   = fonteServidores === 'oracle'
+    ? `Oracle · entidade ${oracleConfig.ent_codigo} / ${oracleConfig.exercicio}`
+    : (fileInfo?.filename || 'CSV');
   const isProcessing = fase === 'processing';
 
   // ═══════════════════════════════════════════════════════
-  // TOPBAR (shared)
+  // TOPBAR
   // ═══════════════════════════════════════════════════════
   const Topbar = () => (
     <div className="topbar">
@@ -295,8 +390,8 @@ export default function App() {
           </button>
         )}
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', opacity: 0.7 }}>
-          {apiHealth === 'ok' && <><div className="dot green" /> API conectada</>}
-          {apiHealth === 'error' && <><div className="dot red" /> API offline</>}
+          {apiHealth === 'ok'       && <><div className="dot green" /> API conectada</>}
+          {apiHealth === 'error'    && <><div className="dot red"   /> API offline</>}
           {apiHealth === 'checking' && <><div className="dot amber" /> Verificando</>}
         </div>
       </div>
@@ -310,17 +405,20 @@ export default function App() {
     <>
       <Topbar />
       <div className="page fade-up">
+        {/* Cards de resumo */}
         <div className="stats-row cols-3" style={{ marginTop: '1.5rem' }}>
           <div className="stat-card">
-            <div className="stat-label">Arquivo carregado</div>
-            {fileInfo
-              ? <><div className="stat-value" style={{ fontSize: '1.4rem' }}>{fileInfo.total.toLocaleString('pt-BR')}</div><div className="stat-sub">{fileInfo.filename}</div></>
-              : <><div className="stat-value muted" style={{ color: 'var(--text-3)' }}>—</div><div className="stat-sub">nenhum arquivo</div></>}
+            <div className="stat-label">Fonte dos servidores</div>
+            {fonteServidores === 'oracle'
+              ? <><div className="stat-value" style={{ fontSize: '1.1rem', marginTop: 4 }}>Oracle</div><div className="stat-sub">entidade {oracleConfig.ent_codigo} · {oracleConfig.exercicio}</div></>
+              : fileInfo
+                ? <><div className="stat-value" style={{ fontSize: '1.4rem' }}>{fileInfo.total.toLocaleString('pt-BR')}</div><div className="stat-sub">{fileInfo.filename}</div></>
+                : <><div className="stat-value muted" style={{ color: 'var(--text-3)' }}>—</div><div className="stat-sub">nenhum arquivo</div></>}
           </div>
           <div className="stat-card">
             <div className="stat-label">Período configurado</div>
             <div className="stat-value muted">{labelPeriodo}</div>
-            <div className="stat-sub">{getMesesList(config.m_ini, config.m_fim).length} meses</div>
+            <div className="stat-sub">{getMesesList(config.m_ini, config.m_fim).length} meses · {PARALLEL_WORKERS} paralelos</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Modo de busca</div>
@@ -334,43 +432,81 @@ export default function App() {
         {error && <div className="alert alert-red"><AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span></div>}
 
         <div className="layout">
-          {/* Config sidebar */}
           <div className="config-panel">
             <div className="config-panel-header">Configuração da consulta</div>
             <div className="config-panel-body">
 
+              {/* ── Fonte dos servidores ── */}
               <div className="field">
-                <label>Arquivo de servidores</label>
-                <div className={`upload-zone${file ? ' has-file' : ''}`}
-                  onClick={() => document.getElementById('fileInput').click()}
-                  onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
-                  <Upload size={20} style={{ color: file ? 'var(--green)' : 'var(--text-3)' }} />
-                  <div className="upload-name">{file ? file.name : 'Arraste ou clique — CSV ou Excel'}</div>
-                  {fileInfo && <span className="badge badge-green">{fileInfo.total.toLocaleString('pt-BR')} registros</span>}
-                  <input id="fileInput" type="file" hidden onChange={handleFileUpload} accept=".csv,.xlsx,.xls" />
+                <label>Fonte dos servidores</label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                  <button
+                    className={`btn btn-sm ${fonteServidores === 'oracle' ? 'btn-active' : 'btn-ghost'}`}
+                    onClick={() => setFonteServidores('oracle')}>
+                    <Database size={11} /> Oracle (banco)
+                  </button>
+                  <button
+                    className={`btn btn-sm ${fonteServidores === 'csv' ? 'btn-active' : 'btn-ghost'}`}
+                    onClick={() => setFonteServidores('csv')}>
+                    <Upload size={11} /> CSV / Excel
+                  </button>
                 </div>
               </div>
 
-              {columns.length > 0 && (
+              {/* ── Oracle config ── */}
+              {fonteServidores === 'oracle' && (
                 <div className="mapping-box">
-                  <div className="mapping-title">Mapeamento de colunas</div>
-                  <div className="field" style={{ marginBottom: '0.7rem' }}>
-                    <label>Coluna de CPF *</label>
-                    <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
-                      <option value="">— Selecione —</option>
-                      {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                  <div className="mapping-title">Conexão Oracle</div>
+                  <div className="field" style={{ marginBottom: '0.6rem' }}>
+                    <label>Código da Entidade</label>
+                    <input type="text" value={oracleConfig.ent_codigo}
+                      onChange={e => setOracleConfig(p => ({ ...p, ent_codigo: e.target.value }))} />
                   </div>
                   <div className="field" style={{ marginBottom: 0 }}>
-                    <label>Coluna de Nome</label>
-                    <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
-                      <option value="">— Selecione —</option>
-                      {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
+                    <label>Exercício (ano)</label>
+                    <input type="text" maxLength={4} value={oracleConfig.exercicio}
+                      onChange={e => setOracleConfig(p => ({ ...p, exercicio: e.target.value }))} />
                   </div>
                 </div>
               )}
 
+              {/* ── CSV config ── */}
+              {fonteServidores === 'csv' && (
+                <>
+                  <div className="field">
+                    <label>Arquivo de servidores</label>
+                    <div className={`upload-zone${file ? ' has-file' : ''}`}
+                      onClick={() => document.getElementById('fileInput').click()}
+                      onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+                      <Upload size={20} style={{ color: file ? 'var(--green)' : 'var(--text-3)' }} />
+                      <div className="upload-name">{file ? file.name : 'Arraste ou clique — CSV ou Excel'}</div>
+                      {fileInfo && <span className="badge badge-green">{fileInfo.total.toLocaleString('pt-BR')} registros</span>}
+                      <input id="fileInput" type="file" hidden onChange={handleFileUpload} accept=".csv,.xlsx,.xls" />
+                    </div>
+                  </div>
+                  {columns.length > 0 && (
+                    <div className="mapping-box">
+                      <div className="mapping-title">Mapeamento de colunas</div>
+                      <div className="field" style={{ marginBottom: '0.7rem' }}>
+                        <label>Coluna de CPF *</label>
+                        <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
+                          <option value="">— Selecione —</option>
+                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Coluna de Nome</label>
+                        <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
+                          <option value="">— Selecione —</option>
+                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── Período ── */}
               <div className="field-row">
                 <div className="field">
                   <label>Mês início</label>
@@ -382,6 +518,7 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ── Modo cruzamento ── */}
               <div className="field">
                 <label>Modo de cruzamento</label>
                 <select value={config.modo} onChange={e => setConfig({ ...config, modo: e.target.value })}>
@@ -390,18 +527,13 @@ export default function App() {
                 </select>
               </div>
 
+              {/* ── Seletor município ── */}
               {config.modo === 'municipio' && (
                 <div className="field" ref={municipioRef}>
                   <label>Estado (UF) e Município</label>
                   <div className="field-row" style={{ marginBottom: '0.4rem' }}>
-                    <select
-                      value={filtroUF}
-                      style={{ width: '90px', flexShrink: 0 }}
-                      onChange={e => {
-                        setFiltroUF(e.target.value);
-                        setMunicipioSearch('');
-                        setConfig(p => ({ ...p, ibge: '' }));
-                      }}>
+                    <select value={filtroUF} style={{ width: '90px', flexShrink: 0 }}
+                      onChange={e => { setFiltroUF(e.target.value); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); }}>
                       <option value="">Todos</option>
                       {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
                         'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
@@ -441,11 +573,11 @@ export default function App() {
 
               <div className="divider" />
 
+              {/* ── Avançado ── */}
               <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
                 <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
                 <Settings size={11} /> Configurações avançadas
               </button>
-
               {showAdvanced && (
                 <div className="field" style={{ marginBottom: '0.75rem' }}>
                   <label>Chave de API (sobrepõe a do servidor)</label>
@@ -463,12 +595,14 @@ export default function App() {
                 Iniciar Cruzamento
               </button>
 
-              {file && !config.col_cpf && <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.5rem', textAlign: 'center' }}>Selecione a coluna de CPF para continuar</p>}
-              {file && config.col_cpf && config.modo === 'municipio' && !config.ibge && <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.5rem', textAlign: 'center' }}>Selecione um município para continuar</p>}
+              {fonteServidores === 'csv' && file && !config.col_cpf &&
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.5rem', textAlign: 'center' }}>Selecione a coluna de CPF para continuar</p>}
+              {config.modo === 'municipio' && !config.ibge &&
+                <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.5rem', textAlign: 'center' }}>Selecione um município para continuar</p>}
             </div>
           </div>
 
-          {/* Empty results */}
+          {/* Painel de resultados vazio */}
           <div className="results-panel">
             <div className="results-panel-header">
               <span className="results-panel-title">Resultados</span>
@@ -491,7 +625,6 @@ export default function App() {
     <>
       <Topbar />
       <div className="page fade-up">
-        {/* Summary cards */}
         <div className="stats-row cols-4" style={{ marginTop: '1.5rem' }}>
           <div className="stat-card">
             <div className="stat-label">Servidores únicos</div>
@@ -517,10 +650,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* Config banner */}
         <div className="config-banner">
           <div className="config-banner-info">
-            <span><strong>Arquivo:</strong> {fileInfo?.filename} ({fileInfo?.total.toLocaleString('pt-BR')} serv.)</span>
+            <span><strong>Servidores:</strong> {labelFonte}{oracleInfo ? ` (${oracleInfo.total.toLocaleString('pt-BR')} carregados)` : ''}</span>
             <span><strong>Período:</strong> {labelPeriodo}</span>
             <span><strong>Local:</strong> {labelLocal}</span>
             {modoTeste && <span className="badge badge-amber">Modo Teste</span>}
@@ -534,9 +666,7 @@ export default function App() {
 
         <div className="results-panel">
           <div className="results-panel-header">
-            <span className="results-panel-title">
-              {isProcessing ? 'Processando…' : 'Resultados do cruzamento'}
-            </span>
+            <span className="results-panel-title">{isProcessing ? 'Processando…' : 'Resultados do cruzamento'}</span>
             {allResults.length > 0 && (
               <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                 <button className={`btn btn-sm ${agrupado ? 'btn-active' : 'btn-ghost'}`}
@@ -558,7 +688,6 @@ export default function App() {
           </div>
           <div className="results-panel-body">
 
-            {/* Progress */}
             {isProcessing && (
               <div className="progress-wrap">
                 <div className="progress-meta">
@@ -572,14 +701,12 @@ export default function App() {
               </div>
             )}
 
-            {/* Cancelled */}
             {!isProcessing && status?.status === 'cancelled' && (
               <div className="alert alert-amber" style={{ marginBottom: '1.25rem' }}>
                 <AlertCircle size={14} style={{ flexShrink: 0 }} /> Consulta cancelada. Exibindo resultados parciais.
               </div>
             )}
 
-            {/* Empty completed */}
             {!isProcessing && status?.status === 'completed' && allResults.length === 0 && (
               <div className="empty" style={{ color: 'var(--green)' }}>
                 <CheckCircle2 size={40} style={{ opacity: 0.4, marginBottom: '0.25rem' }} />
@@ -588,7 +715,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Results */}
             {allResults.length > 0 && (
               <>
                 <div className="filter-wrap">
@@ -596,7 +722,6 @@ export default function App() {
                   <input type="text" placeholder="Filtrar por nome, CPF ou município…" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} />
                 </div>
 
-                {/* Flat table */}
                 {!agrupado && (
                   <div className="table-wrap">
                     <table>
@@ -626,7 +751,6 @@ export default function App() {
                   </div>
                 )}
 
-                {/* Grouped table */}
                 {agrupado && (
                   <div className="table-wrap">
                     <table>
@@ -637,7 +761,7 @@ export default function App() {
                       <tbody>
                         {groupedResults.map(g => {
                           const expanded = expandedRows.has(g.cpf);
-                          const meses = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
+                          const mesesG = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
                           const alerta = g.ocorrencias.length > 5;
                           return (
                             <React.Fragment key={g.cpf}>
@@ -655,7 +779,7 @@ export default function App() {
                                   {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos — possível falso positivo`}>⚠ {g.nisCount} NIS</span>}
                                 </td>
                                 <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
-                                <td className="td-dim">{meses.join(' · ')}</td>
+                                <td className="td-dim">{mesesG.join(' · ')}</td>
                                 <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                               </tr>
                               {expanded && g.ocorrencias.map((o, i) => (

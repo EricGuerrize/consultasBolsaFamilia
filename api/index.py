@@ -1,4 +1,6 @@
 import os
+import re
+import sys
 import requests
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -6,6 +8,9 @@ import pandas as pd
 from fastapi import FastAPI, UploadFile, File, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+
+# Permite importar oracle_connector que está na pasta pai
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 load_dotenv()
 
@@ -22,6 +27,14 @@ API_BASE   = "https://api.portaldatransparencia.gov.br/api-de-dados"
 API_SACADO = f"{API_BASE}/novo-bolsa-familia-sacado-beneficiario-por-municipio"
 API_CPF    = f"{API_BASE}/novo-bolsa-familia-disponivel-por-cpf-ou-nis"
 
+
+def _normalizar_cpf(cpf) -> str:
+    if not cpf:
+        return ""
+    d = re.sub(r"\D", "", str(cpf))
+    return d.zfill(11)[:11] if len(d) <= 11 else d[:11]
+
+
 # ─────────────────────────────────────────────
 #  ENDPOINTS
 # ─────────────────────────────────────────────
@@ -29,6 +42,40 @@ API_CPF    = f"{API_BASE}/novo-bolsa-familia-disponivel-por-cpf-ou-nis"
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "service": "Bolsa Família API"}
+
+
+@app.post("/api/servidores")
+async def get_servidores(request: Request):
+    """
+    Consulta o Oracle e retorna a lista de servidores (cpf + nome).
+    Body: { "ent_codigo": "1118181", "exercicio": "2024" }
+    """
+    body = await request.json()
+    ent_codigo = body.get("ent_codigo", "1118181")
+    exercicio  = body.get("exercicio", "2024")
+
+    try:
+        from oracle_connector import OracleConnector
+        oracle = OracleConnector()
+        df = oracle.get_servidores_data(ent_codigo=ent_codigo, exercicio=exercicio)
+        df.columns = [c.lower() for c in df.columns]
+
+        # Normaliza CPF e remove duplicatas
+        df["pess_cpf"] = df["pess_cpf"].apply(_normalizar_cpf)
+        df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
+
+        servidores = (
+            df[["pess_cpf", "pess_nome"]]
+            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome"})
+            .to_dict(orient="records")
+        )
+        return {"servidores": servidores, "total": len(servidores)}
+
+    except ImportError:
+        raise HTTPException(status_code=503, detail="oracledb não instalado no servidor")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro Oracle: {str(e)}")
+
 
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
@@ -45,11 +92,10 @@ async def upload_file(file: UploadFile = File(...)):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Erro ao ler arquivo: {str(e)}")
 
+
 @app.post("/api/proxy")
 async def proxy_portal(request: Request):
-    """Proxy leve: repassa UMA página da API do Portal da Transparência.
-    Todo o cruzamento é feito no frontend — isso evita o timeout de 10s do Vercel Hobby.
-    """
+    """Proxy leve: repassa UMA página da API do Portal da Transparência."""
     body = await request.json()
     real_api_key = body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")
     if not real_api_key:
@@ -85,6 +131,7 @@ async def proxy_portal(request: Request):
         raise HTTPException(status_code=504, detail="API do Portal não respondeu a tempo")
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Erro ao contactar API do Portal: {str(e)}")
+
 
 if __name__ == "__main__":
     import uvicorn

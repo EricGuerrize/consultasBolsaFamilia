@@ -31,11 +31,11 @@ export default function App() {
   const [municipios, setMunicipios] = useState([]);
   const [municipioSearch, setMunicipioSearch] = useState('');
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
-  const [filtroUF, setFiltroUF] = useState('MT');
   const municipioRef = useRef(null);
 
   // ── Config consulta ──────────────────────────
   const [modoTeste, setModoTeste] = useState(true);
+  const [showBancoConfig, setShowBancoConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [config, setConfig] = useState({
     m_ini: '202401', m_fim: '202403',
@@ -405,50 +405,28 @@ export default function App() {
     <>
       <Topbar />
       <div className="page fade-up">
-        {/* Cards de resumo */}
-        <div className="stats-row cols-3" style={{ marginTop: '1.5rem' }}>
-          <div className="stat-card">
-            <div className="stat-label">Fonte dos servidores</div>
-            {fonteServidores === 'oracle'
-              ? <><div className="stat-value" style={{ fontSize: '1.1rem', marginTop: 4 }}>Oracle</div><div className="stat-sub">entidade {oracleConfig.ent_codigo} · {oracleConfig.exercicio}</div></>
-              : fileInfo
-                ? <><div className="stat-value" style={{ fontSize: '1.4rem' }}>{fileInfo.total.toLocaleString('pt-BR')}</div><div className="stat-sub">{fileInfo.filename}</div></>
-                : <><div className="stat-value muted" style={{ color: 'var(--text-3)' }}>—</div><div className="stat-sub">nenhum arquivo</div></>}
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Período configurado</div>
-            <div className="stat-value muted">{labelPeriodo}</div>
-            <div className="stat-sub">{getMesesList(config.m_ini, config.m_fim).length} meses · {PARALLEL_WORKERS} paralelos</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-label">Modo de busca</div>
-            <div className="stat-value muted" style={{ fontSize: '1.1rem', marginTop: '4px' }}>
-              {config.modo === 'municipio' ? 'Em lote por município' : 'Individual por CPF'}
-            </div>
-            {modoTeste && <div className="stat-sub"><span className="badge badge-amber">Modo Teste ativo</span></div>}
-          </div>
-        </div>
+        {error && <div className="alert alert-red" style={{ marginTop: '1.5rem' }}><AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span></div>}
 
-        {error && <div className="alert alert-red"><AlertCircle size={15} style={{ flexShrink: 0, marginTop: 1 }} /><span>{error}</span></div>}
-
-        <div className="layout">
+        <div className="layout" style={{ marginTop: error ? '1rem' : '1.75rem' }}>
           <div className="config-panel">
-            <div className="config-panel-header">Configuração da consulta</div>
+            <div className="config-panel-header">
+              <span>Configurar consulta</span>
+            </div>
             <div className="config-panel-body">
 
               {/* ── Fonte dos servidores ── */}
               <div className="field">
                 <label>Fonte dos servidores</label>
-                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                <div className="source-toggle" style={{ marginTop: '0.25rem' }}>
                   <button
-                    className={`btn btn-sm ${fonteServidores === 'oracle' ? 'btn-active' : 'btn-ghost'}`}
+                    className={`source-btn ${fonteServidores === 'oracle' ? 'active' : ''}`}
                     onClick={() => setFonteServidores('oracle')}>
-                    <Database size={11} /> Oracle (banco)
+                    <Database size={13} /> Oracle
                   </button>
                   <button
-                    className={`btn btn-sm ${fonteServidores === 'csv' ? 'btn-active' : 'btn-ghost'}`}
+                    className={`source-btn ${fonteServidores === 'csv' ? 'active' : ''}`}
                     onClick={() => setFonteServidores('csv')}>
-                    <Upload size={11} /> CSV / Excel
+                    <Upload size={13} /> CSV / Excel
                   </button>
                 </div>
               </div>
@@ -456,11 +434,11 @@ export default function App() {
               {/* ── Configurações do Banco (Oracle) ── */}
               {fonteServidores === 'oracle' && (
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
-                    <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                  <button type="button" className="advanced-toggle" onClick={() => setShowBancoConfig(a => !a)}>
+                    <ChevronRight size={11} style={{ transform: showBancoConfig ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
                     <Database size={11} /> Configurações do Banco
                   </button>
-                  {showAdvanced && (
+                  {showBancoConfig && (
                     <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
                       <div className="field" style={{ marginBottom: '0.6rem' }}>
                         <label>Código da Entidade</label>
@@ -533,58 +511,39 @@ export default function App() {
               {/* ── Seletor município ── */}
               {config.modo === 'municipio' && (
                 <div className="field" ref={municipioRef}>
-                  <label>Município de Auditoria</label>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-3)' }}>UF:</span>
-                      <div className="uf-selector">
-                        {['MT','GO','MS','DF','AM','SP','RJ'].map(uf => (
-                          <button key={uf} className={filtroUF === uf ? 'active' : ''} 
-                            onClick={(e) => { 
-                              e.preventDefault();
-                              setFiltroUF(uf); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); 
-                            }}>{uf}</button>
-                        ))}
-                        <select value={filtroUF} className="uf-select-mini"
-                          onChange={e => { setFiltroUF(e.target.value); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); }}>
-                          <option value="">Outros</option>
-                          {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
-                            'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
-                            .map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                        </select>
-                      </div>
-                    </div>
-                    
-                    <div className="combobox full-width">
-                      <Search className="search-icon-inside" size={16} />
-                      <input type="text"
-                        className="input-large"
-                        placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Comece a digitar o nome do município...'}
-                        value={municipioSearch} disabled={municipios.length === 0}
-                        onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
-                        onFocus={() => setShowMunicipioDropdown(true)} />
-                      {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
-                      {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
-                        const q = municipioSearch.toLowerCase();
-                        const filtered = municipios.filter(m =>
-                          (!filtroUF || m.uf === filtroUF) &&
-                          (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))
-                        );
-                        return (
-                          <ul className="combobox-dropdown dropdown-large">
-                            {filtered.length === 0
-                              ? <li className="city-empty">Nenhum município encontrado{filtroUF ? ` em ${filtroUF}` : ''}</li>
-                              : filtered.slice(0, 50).map(m => (
-                                <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
-                                  onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(`${m.nome} - ${m.uf}`); setShowMunicipioDropdown(false); }}>
-                                  <span className="city-name" style={{ fontWeight: 600 }}>{m.nome}</span>
-                                  <span className="city-meta">{m.uf} · {m.id}</span>
-                                </li>
-                              ))}
-                          </ul>
-                        );
-                      })()}
-                    </div>
+                  <label>
+                    Município
+                    <span className="label-tag">Mato Grosso · MT</span>
+                  </label>
+                  <div className="combobox full-width">
+                    <Search className="search-icon-inside" size={16} />
+                    <input type="text"
+                      className="input-large"
+                      placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Digite o nome do município...'}
+                      value={municipioSearch} disabled={municipios.length === 0}
+                      onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
+                      onFocus={() => setShowMunicipioDropdown(true)} />
+                    {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
+                    {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
+                      const q = municipioSearch.toLowerCase();
+                      const filtered = municipios.filter(m =>
+                        m.uf === 'MT' &&
+                        (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))
+                      );
+                      return (
+                        <ul className="combobox-dropdown dropdown-large">
+                          {filtered.length === 0
+                            ? <li className="city-empty">Nenhum município encontrado em MT</li>
+                            : filtered.slice(0, 50).map(m => (
+                              <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
+                                onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(m.nome); setShowMunicipioDropdown(false); }}>
+                                <span className="city-name" style={{ fontWeight: 600 }}>{m.nome}</span>
+                                <span className="city-meta">{m.id}</span>
+                              </li>
+                            ))}
+                        </ul>
+                      );
+                    })()}
                   </div>
                 </div>
               )}

@@ -453,20 +453,27 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ── Oracle config ── */}
+              {/* ── Configurações do Banco (Oracle) ── */}
               {fonteServidores === 'oracle' && (
-                <div className="mapping-box">
-                  <div className="mapping-title">Conexão Oracle</div>
-                  <div className="field" style={{ marginBottom: '0.6rem' }}>
-                    <label>Código da Entidade</label>
-                    <input type="text" value={oracleConfig.ent_codigo}
-                      onChange={e => setOracleConfig(p => ({ ...p, ent_codigo: e.target.value }))} />
-                  </div>
-                  <div className="field" style={{ marginBottom: 0 }}>
-                    <label>Exercício (ano)</label>
-                    <input type="text" maxLength={4} value={oracleConfig.exercicio}
-                      onChange={e => setOracleConfig(p => ({ ...p, exercicio: e.target.value }))} />
-                  </div>
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
+                    <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                    <Database size={11} /> Configurações do Banco
+                  </button>
+                  {showAdvanced && (
+                    <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
+                      <div className="field" style={{ marginBottom: '0.6rem' }}>
+                        <label>Código da Entidade</label>
+                        <input type="text" value={oracleConfig.ent_codigo}
+                          onChange={e => setOracleConfig(p => ({ ...p, ent_codigo: e.target.value }))} />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Exercício (ano)</label>
+                        <input type="text" maxLength={4} value={oracleConfig.exercicio}
+                          onChange={e => setOracleConfig(p => ({ ...p, exercicio: e.target.value }))} />
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -506,42 +513,53 @@ export default function App() {
                 </>
               )}
 
-              {/* ── Período ── */}
-              <div className="field-row">
-                <div className="field">
-                  <label>Mês início</label>
-                  <input type="text" placeholder="YYYYMM" value={config.m_ini} maxLength={6} onChange={e => setConfig({ ...config, m_ini: e.target.value })} />
-                </div>
-                <div className="field">
-                  <label>Mês fim</label>
-                  <input type="text" placeholder="YYYYMM" value={config.m_fim} maxLength={6} onChange={e => setConfig({ ...config, m_fim: e.target.value })} />
+              {/* ── Período e Modo ── */}
+              <div className="field">
+                <label>Mês de Referência (YYYYMM)</label>
+                <div className="field-row">
+                  <input type="text" placeholder="Início" value={config.m_ini} maxLength={6} onChange={e => setConfig({ ...config, m_ini: e.target.value })} />
+                  <input type="text" placeholder="Fim" value={config.m_fim} maxLength={6} onChange={e => setConfig({ ...config, m_fim: e.target.value })} />
                 </div>
               </div>
 
-              {/* ── Modo cruzamento ── */}
               <div className="field">
                 <label>Modo de cruzamento</label>
-                <select value={config.modo} onChange={e => setConfig({ ...config, modo: e.target.value })}>
-                  <option value="municipio">Em lote — por município</option>
-                  <option value="cpf">Individual — por CPF</option>
-                </select>
+                <div className="mode-toggle">
+                  <button className={config.modo === 'municipio' ? 'active' : ''} onClick={() => setConfig({...config, modo: 'municipio'})}>Município</button>
+                  <button className={config.modo === 'cpf' ? 'active' : ''} onClick={() => setConfig({...config, modo: 'cpf'})}>Individual (CPF)</button>
+                </div>
               </div>
 
               {/* ── Seletor município ── */}
               {config.modo === 'municipio' && (
                 <div className="field" ref={municipioRef}>
-                  <label>Estado (UF) e Município</label>
-                  <div className="field-row" style={{ marginBottom: '0.4rem' }}>
-                    <select value={filtroUF} style={{ width: '90px', flexShrink: 0 }}
-                      onChange={e => { setFiltroUF(e.target.value); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); }}>
-                      <option value="">Todos</option>
-                      {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
-                        'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
-                        .map(uf => <option key={uf} value={uf}>{uf}</option>)}
-                    </select>
-                    <div className="combobox" style={{ flex: 1 }}>
+                  <label>Município de Auditoria</label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{ fontSize: '0.7rem', fontWeight: 700, color: 'var(--text-3)' }}>UF:</span>
+                      <div className="uf-selector">
+                        {['MT','GO','MS','DF','AM','SP','RJ'].map(uf => (
+                          <button key={uf} className={filtroUF === uf ? 'active' : ''} 
+                            onClick={(e) => { 
+                              e.preventDefault();
+                              setFiltroUF(uf); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); 
+                            }}>{uf}</button>
+                        ))}
+                        <select value={filtroUF} className="uf-select-mini"
+                          onChange={e => { setFiltroUF(e.target.value); setMunicipioSearch(''); setConfig(p => ({ ...p, ibge: '' })); }}>
+                          <option value="">Outros</option>
+                          {['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT',
+                            'PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO']
+                            .map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    
+                    <div className="combobox full-width">
+                      <Search className="search-icon-inside" size={16} />
                       <input type="text"
-                        placeholder={municipios.length === 0 ? 'Carregando...' : 'Buscar município...'}
+                        className="input-large"
+                        placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Comece a digitar o nome do município...'}
                         value={municipioSearch} disabled={municipios.length === 0}
                         onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
                         onFocus={() => setShowMunicipioDropdown(true)} />
@@ -553,13 +571,13 @@ export default function App() {
                           (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))
                         );
                         return (
-                          <ul className="combobox-dropdown">
+                          <ul className="combobox-dropdown dropdown-large">
                             {filtered.length === 0
                               ? <li className="city-empty">Nenhum município encontrado{filtroUF ? ` em ${filtroUF}` : ''}</li>
                               : filtered.slice(0, 50).map(m => (
                                 <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
                                   onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(`${m.nome} - ${m.uf}`); setShowMunicipioDropdown(false); }}>
-                                  <span className="city-name">{m.nome}</span>
+                                  <span className="city-name" style={{ fontWeight: 600 }}>{m.nome}</span>
                                   <span className="city-meta">{m.uf} · {m.id}</span>
                                 </li>
                               ))}

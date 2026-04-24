@@ -21,3 +21,5 @@ Thumbs.db
 # Dados sensíveis e config local
 *.csv
 .claude/
+firebase_service_account.json
+*service_account*.json

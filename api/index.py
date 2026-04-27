@@ -116,11 +116,17 @@ async def proxy_portal(request: Request):
             url, params=params,
             headers={"chave-api-dados": real_api_key, "Accept": "application/json"},
             timeout=55,
+            allow_redirects=False,
         )
+        if r.status_code in (301, 302, 303, 307, 308):
+            raise HTTPException(status_code=401, detail="Chave de API inválida ou expirada — renove em portaldatransparencia.gov.br/api")
         if r.status_code == 429:
             raise HTTPException(status_code=429, detail="Rate limit da API do Portal")
         if r.status_code >= 400:
             raise HTTPException(status_code=r.status_code, detail=f"API do Portal retornou {r.status_code}: {r.text[:200]}")
+        content_type = r.headers.get("content-type", "")
+        if "text/html" in content_type:
+            raise HTTPException(status_code=401, detail="Chave de API inválida ou expirada — renove em portaldatransparencia.gov.br/api")
         try:
             return r.json() or []
         except Exception:

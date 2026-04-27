@@ -77,6 +77,7 @@ class OracleConnector:
                    p.pess_matricula,
                    e.pess_cpf,
                    TRANSLATE(e.pess_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS pess_nome,
+                   e.pess_dataadmissao,
                    TRANSLATE(o.org_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS org_nome,
                    TRANSLATE(u.unor_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS unor_nome,
                    TRANSLATE(c.cfpess_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS cfpess_nome,

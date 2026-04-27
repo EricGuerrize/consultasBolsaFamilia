@@ -64,11 +64,21 @@ async def get_servidores(request: Request):
         df["pess_cpf"] = df["pess_cpf"].apply(_normalizar_cpf)
         df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
 
-        servidores = (
-            df[["pess_cpf", "pess_nome"]]
-            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome"})
-            .to_dict(orient="records")
-        )
+        cols = ["pess_cpf", "pess_nome"]
+        if "pess_dataadmissao" in df.columns:
+            cols.append("pess_dataadmissao")
+
+        servidores_df = df[cols].rename(columns={
+            "pess_cpf": "cpf",
+            "pess_nome": "nome",
+            "pess_dataadmissao": "dt_admissao",
+        })
+        # Formata data como string DD/MM/AAAA
+        if "dt_admissao" in servidores_df.columns:
+            servidores_df["dt_admissao"] = servidores_df["dt_admissao"].apply(
+                lambda v: v.strftime("%d/%m/%Y") if hasattr(v, "strftime") else (str(v)[:10] if v else "")
+            )
+        servidores = servidores_df.to_dict(orient="records")
         return {"servidores": servidores, "total": len(servidores)}
 
     except ImportError:

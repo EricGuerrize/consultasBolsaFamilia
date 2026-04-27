@@ -147,7 +147,8 @@ export default function App() {
     const ufAbbr = String(uf.nome || '').length === 2 ? uf.nome : (String(uf.sigla || '').length === 2 ? uf.sigla : String(uf.sigla || '').slice(0, 2));
     
     return {
-      servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
+      servidor: srv.nome || '', cpf: srv.cpf || '', dt_admissao: srv.dt_admissao || '',
+      beneficiario: bf.nome || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
       municipio: mun.nomeIBGE || '', uf: ufAbbr,
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
@@ -171,11 +172,11 @@ export default function App() {
   // ── Constrói serverMap (Oracle ou CSV) ───────
   const buildServerMap = async () => {
     const map = new Map();
-    const add = (cpfRaw, nome) => {
+    const add = (cpfRaw, nome, dt_admissao = '') => {
       const cpf = normalizarCPF(cpfRaw);
       if (!cpf) return;
       const chave = chaveJS(cpf, nome);
-      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome }); }
+      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome, dt_admissao }); }
     };
 
     if (fonteServidores === 'oracle') {
@@ -187,7 +188,7 @@ export default function App() {
       if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
       const { servidores, total } = await res.json();
       setOracleInfo({ total });
-      servidores.forEach(s => add(s.cpf, s.nome));
+      servidores.forEach(s => add(s.cpf, s.nome, s.dt_admissao || ''));
       return { serverMap: map, totalServidores: total };
     } else {
       const { rows, sep, headers } = await parseCSV(file);
@@ -717,7 +718,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>Admissão</th><th>NIS</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
@@ -727,6 +728,7 @@ export default function App() {
                             <td className="td-num">{i + 1}</td>
                             <td className="td-bold">{row.servidor}</td>
                             <td className="td-mono">{row.cpf}</td>
+                            <td className="td-mono td-dim">{row.dt_admissao || '—'}</td>
                             <td className="td-mono td-dim">{row.nis || '—'}</td>
                             <td>{row.beneficiario}</td>
                             <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
@@ -746,7 +748,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                        <th>Servidor</th><th>CPF</th><th>Admissão</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
                       </tr></thead>
                       <tbody>
                         {groupedResults.map(g => {
@@ -764,6 +766,7 @@ export default function App() {
                                   {g.servidor}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
+                                <td className="td-mono td-dim">{g.ocorrencias[0]?.dt_admissao || '—'}</td>
                                 <td className="td-mono td-dim">
                                   {g.nis || '—'}
                                   {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos — possível falso positivo`}>⚠ {g.nisCount} NIS</span>}

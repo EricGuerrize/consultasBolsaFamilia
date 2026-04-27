@@ -134,7 +134,8 @@ async def proxy_portal(request: Request):
         try:
             return r.json() or []
         except Exception:
-            raise HTTPException(status_code=502, detail="API do Portal retornou resposta inválida")
+            preview = r.text[:300] if r.text else "(vazio)"
+            raise HTTPException(status_code=502, detail=f"API do Portal retornou resposta inválida (HTTP {r.status_code}): {preview}")
     except HTTPException:
         raise
     except requests.Timeout:

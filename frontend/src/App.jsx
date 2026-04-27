@@ -6,8 +6,7 @@ import {
   Database,
 } from 'lucide-react';
 
-// Número de meses buscados em paralelo (par/ímpar simultâneos)
-const PARALLEL_WORKERS = 3;
+const PARALLEL_WORKERS = 1;
 
 export default function App() {
   // ── Fonte dos servidores ─────────────────────
@@ -247,7 +246,7 @@ export default function App() {
             flush();
             if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
             pagina++;
-            await delay(150);
+            await delay(300);
           }
           mesesConcluidos++;
           setStatus(prev => ({

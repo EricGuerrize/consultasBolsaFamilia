@@ -15,6 +15,8 @@ Automação do pipeline multi-cidades e correção de bugs críticos de interfac
 - **Lucas do Rio Verde**: 149 correspondências identificadas.
 - **Jangada**: 0 correspondências.
 - **Rondonópolis**: Processamento otimizado (Correção UF 'MT' verificada).
+- **Novas Funcionalidades**: Integração de **Cargo**, **Órgão** e **Data de Admissão** nos resultados.
+- **Auditoria de Cronologia**: Sistema agora alerta se o servidor recebeu o benefício após ter sido contratado.
 
 ---
-*Status: Código com correção de UF (MT) definitiva aplicada e verificado.*
+*Status: Código com auditoria de cronologia e cargos implementado.*

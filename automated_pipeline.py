@@ -100,6 +100,7 @@ def cruzar_registro(srv: dict, reg: dict) -> dict:
         "CPF":             formatar_cpf(normalizar_cpf(srv.get("pess_cpf", ""))),
         "Matrícula":       str(srv.get("pess_matricula", "")),
         "Cargo":           str(srv.get("cfpess_nome", "")),
+        "Admissão":        str(srv.get("pess_data_admissao", "")),
         "Órgão":           str(srv.get("org_nome", "")),
         "Nome BF":         bf.get("nome", ""),
         "NIS":             str(bf.get("nis", "")),

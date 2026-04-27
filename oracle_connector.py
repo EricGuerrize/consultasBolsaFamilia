@@ -80,6 +80,7 @@ class OracleConnector:
                    TRANSLATE(o.org_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS org_nome,
                    TRANSLATE(u.unor_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS unor_nome,
                    TRANSLATE(c.cfpess_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCAEIOUAEIOUAEIOUAOAEIOUC') AS cfpess_nome,
+                   e.pess_data_admissao,
                    NULL AS chfpess_tipocargofuncao,
                    cn.cnat_descricao AS natureza_cargo,
                    DECODE(p.fpgto_mesreferencia,

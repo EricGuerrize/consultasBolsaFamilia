@@ -38,7 +38,8 @@ export default function App() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [config, setConfig] = useState({
     m_ini: '202401', m_fim: '202403',
-    modo: 'municipio', ibge: '', api_key: '', col_cpf: '', col_nome: '',
+    modo: 'municipio', ibge: '', api_key: '', 
+    col_cpf: '', col_nome: '', col_cargo: '', col_admissao: '',
   });
 
   // ── Resultados ───────────────────────────────
@@ -119,6 +120,8 @@ export default function App() {
           ...prev,
           col_cpf: headers.find(c => /cpf/i.test(c)) || '',
           col_nome: headers.find(c => /nome/i.test(c)) || '',
+          col_cargo: headers.find(c => /cargo|fun[cç][aã]o/i.test(c)) || '',
+          col_admissao: headers.find(c => /admiss[aã]o|contrat/i.test(c)) || '',
         }));
       } catch (err) { setError('Erro ao ler CSV: ' + err.message); }
     } else {
@@ -133,6 +136,8 @@ export default function App() {
           ...prev,
           col_cpf: data.columns.find(c => /cpf/i.test(c)) || '',
           col_nome: data.columns.find(c => /nome/i.test(c)) || '',
+          col_cargo: data.columns.find(c => /cargo|fun[cç][aã]o/i.test(c)) || '',
+          col_admissao: data.columns.find(c => /admiss[aã]o|contrat/i.test(c)) || '',
         }));
       } catch (err) { setError(err.message); }
     }
@@ -159,7 +164,12 @@ export default function App() {
     else ufAbbr = v1.slice(0, 2).toUpperCase() || v2.slice(0, 2).toUpperCase() || "MT";
     
     return {
-      servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
+      servidor: srv.nome || srv['Nome Servidor'] || '', 
+      cpf: srv.cpf || srv['CPF'] || '', 
+      beneficiario: bf.nome || '',
+      cargo: srv.cargo || srv['Cargo'] || '',
+      admissao: srv.admissao || srv['Admissão'] || '',
+      orgao: srv.orgao || srv['Órgão'] || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
       municipio: mun.nomeIBGE || '', uf: ufAbbr,
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
@@ -493,9 +503,16 @@ export default function App() {
                           {columns.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
                       </div>
+                      <div className="field" style={{ marginBottom: '0.7rem' }}>
+                        <label>Coluna de Cargo</label>
+                        <select value={config.col_cargo} onChange={e => setConfig({ ...config, col_cargo: e.target.value })}>
+                          <option value="">— Selecione —</option>
+                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
                       <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Coluna de Nome</label>
-                        <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
+                        <label>Coluna de Admissão</label>
+                        <select value={config.col_admissao} onChange={e => setConfig({ ...config, col_admissao: e.target.value })}>
                           <option value="">— Selecione —</option>
                           {columns.map(c => <option key={c} value={c}>{c}</option>)}
                         </select>
@@ -718,24 +735,27 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>Cargo / Admissão</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
                       <tbody>
                         {filteredResults.map((row, i) => (
                           <tr key={i}>
-                            <td className="td-num">{i + 1}</td>
-                            <td className="td-bold">{row.servidor}</td>
-                            <td className="td-mono">{row.cpf}</td>
-                            <td className="td-mono td-dim">{row.nis || '—'}</td>
-                            <td>{row.beneficiario}</td>
-                            <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
-                            <td className="td-dim">{fmtMes(row.mes)}</td>
-                            <td className="td-dim">{row.data_saque || '—'}</td>
-                            <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                            {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
-                          </tr>
+                             <td className="td-num">{i + 1}</td>
+                             <td className="td-bold">{row.servidor}</td>
+                             <td className="td-mono">{row.cpf}</td>
+                             <td>
+                               <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{row.cargo || '—'}</div>
+                               <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Adm: {row.admissao || '—'}</div>
+                             </td>
+                             <td>{row.beneficiario}</td>
+                             <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
+                             <td className="td-dim">{fmtMes(row.mes)}</td>
+                             <td className="td-dim">{row.data_saque || '—'}</td>
+                             <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                             {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
+                           </tr>
                         ))}
                       </tbody>
                     </table>
@@ -747,7 +767,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                        <th>Servidor</th><th>CPF</th><th>Cargo / Órgão</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
                       </tr></thead>
                       <tbody>
                         {groupedResults.map(g => {
@@ -765,27 +785,36 @@ export default function App() {
                                   {g.servidor}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
-                                <td className="td-mono td-dim">
-                                  {g.nis || '—'}
-                                  {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos — possível falso positivo`}>⚠ {g.nisCount} NIS</span>}
+                                <td>
+                                  <div style={{ fontSize: '0.7rem', fontWeight: 600 }}>{g.ocorrencias[0].cargo || '—'}</div>
+                                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>{g.ocorrencias[0].orgao || '—'}</div>
                                 </td>
                                 <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
                                 <td className="td-dim">{mesesG.join(' · ')}</td>
                                 <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                               </tr>
-                              {expanded && g.ocorrencias.map((o, i) => (
-                                <tr key={i} className="row-sub">
-                                  <td></td>
-                                  <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>{o.beneficiario || '—'}</td>
-                                  <td className="td-mono td-dim" style={{ fontSize: '0.78rem' }}>{o.nis || '—'}</td>
-                                  <td className="td-dim" style={{ fontSize: '0.78rem' }}>
-                                    {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
-                                    {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
-                                  </td>
-                                  <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
-                                  <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                                </tr>
-                              ))}
+                              {expanded && g.ocorrencias.map((o, i) => {
+                                const hired = o.admissao ? new Date(o.admissao.split('/').reverse().join('-')) : null;
+                                const ref = new Date(o.mes.slice(0,4), parseInt(o.mes.slice(4))-1, 1);
+                                const isAfter = hired && ref >= hired;
+                                
+                                return (
+                                  <tr key={i} className="row-sub">
+                                    <td></td>
+                                    <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>{o.beneficiario || '—'}</td>
+                                    <td>
+                                      {o.admissao && <div style={{ fontSize: '0.7rem', color: isAfter ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>Adm: {o.admissao} {isAfter ? '⚠ Posterior' : '✓ Anterior'}</div>}
+                                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>NIS: {o.nis || '—'}</div>
+                                    </td>
+                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>
+                                      {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
+                                      {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
+                                    </td>
+                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
+                                    <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                  </tr>
+                                );
+                              })}
                             </React.Fragment>
                           );
                         })}

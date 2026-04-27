@@ -14,7 +14,7 @@ Automação do pipeline multi-cidades e correção de bugs críticos de interfac
 - **Acorizal**: 4 correspondências identificadas.
 - **Lucas do Rio Verde**: 149 correspondências identificadas.
 - **Jangada**: 0 correspondências.
-- **Rondonópolis**: Processamento otimizado para lidar com os 7 mil servidores da base.
+- **Rondonópolis**: Processamento otimizado (Correção UF 'MT' verificada).
 
 ---
-*Status: Código verificado e pronto para produção.*
+*Status: Código com correção de UF (MT) definitiva aplicada e verificado.*

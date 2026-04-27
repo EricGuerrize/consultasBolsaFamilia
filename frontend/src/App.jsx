@@ -142,11 +142,26 @@ export default function App() {
 
   // ── Formato resultado ────────────────────────
   const formatResultJS = (srv, reg, pagina = null) => {
-    const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
+    const bf = reg.beneficiarioNovoBolsaFamilia || {};
+    const mun = reg.municipio || {};
+    const uf = mun.uf || {};
+
+    // O Portal da Transparência às vezes inverte sigla (Mato Grosso) e nome (MT)
+    // Queremos sempre a sigla de 2 letras (MT).
+    let ufAbbr = "MT"; // Default para o contexto do usuário
+    const v1 = String(uf.sigla || '');
+    const v2 = String(uf.nome || '');
+
+    if (v1.length === 2) ufAbbr = v1;
+    else if (v2.length === 2) ufAbbr = v2;
+    else if (v1.toLowerCase().includes("mato grosso")) ufAbbr = "MT";
+    else if (v2.toLowerCase().includes("mato grosso")) ufAbbr = "MT";
+    else ufAbbr = v1.slice(0, 2).toUpperCase() || v2.slice(0, 2).toUpperCase() || "MT";
+    
     return {
       servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
-      municipio: mun.nomeIBGE || '', uf: String(uf.sigla || uf.nome || '').slice(0, 2),
+      municipio: mun.nomeIBGE || '', uf: ufAbbr,
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
       pagina,

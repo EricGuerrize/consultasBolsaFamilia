@@ -125,7 +125,7 @@ async def proxy_portal(request: Request):
         r = requests.get(
             url, params=params,
             headers={"chave-api-dados": real_api_key, "Accept": "application/json"},
-            timeout=55,
+            timeout=9,
         )
         if r.status_code == 429:
             raise HTTPException(status_code=429, detail="Rate limit da API do Portal")

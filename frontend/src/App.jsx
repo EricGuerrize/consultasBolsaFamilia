@@ -10,7 +10,7 @@ const PARALLEL_WORKERS = 1;
 
 export default function App() {
   // ── Fonte dos servidores ─────────────────────
-  const [fonteServidores, setFonteServidores] = useState('oracle'); // 'oracle' | 'csv'
+  const [fonteServidores, setFonteServidores] = useState('csv'); // 'oracle' | 'csv'
   const [oracleConfig, setOracleConfig] = useState({ ent_codigo: '1118181', exercicio: '2024' });
   const [oracleInfo, setOracleInfo] = useState(null); // { total } depois de carregar
 
@@ -107,7 +107,8 @@ export default function App() {
   const handleFileUpload = async e => {
     const f = e.target.files[0];
     if (!f) return;
-    if (f.size > 10 * 1024 * 1024) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite: 10 MB.`); return; }
+    const MAX_SIZE = 800 * 1024 * 1024; // 800MB
+    if (f.size > MAX_SIZE) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite aumentado para 800MB, mas o navegador pode travar.`); return; }
     setFile(f); setColumns([]); setFileInfo(null); setError(null); setStatus(null);
     const suffix = f.name.split('.').pop().toLowerCase();
     if (suffix === 'csv') {

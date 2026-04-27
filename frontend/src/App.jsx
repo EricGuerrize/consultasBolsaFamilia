@@ -6,11 +6,12 @@ import {
   Database,
 } from 'lucide-react';
 
-const PARALLEL_WORKERS = 1;
+// Número de meses buscados em paralelo (par/ímpar simultâneos)
+const PARALLEL_WORKERS = 3;
 
 export default function App() {
   // ── Fonte dos servidores ─────────────────────
-  const [fonteServidores, setFonteServidores] = useState('csv'); // 'oracle' | 'csv'
+  const [fonteServidores, setFonteServidores] = useState('oracle'); // 'oracle' | 'csv'
   const [oracleConfig, setOracleConfig] = useState({ ent_codigo: '1118181', exercicio: '2024' });
   const [oracleInfo, setOracleInfo] = useState(null); // { total } depois de carregar
 
@@ -107,8 +108,7 @@ export default function App() {
   const handleFileUpload = async e => {
     const f = e.target.files[0];
     if (!f) return;
-    const MAX_SIZE = 800 * 1024 * 1024; // 800MB
-    if (f.size > MAX_SIZE) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite aumentado para 800MB, mas o navegador pode travar.`); return; }
+    if (f.size > 10 * 1024 * 1024) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite: 10 MB.`); return; }
     setFile(f); setColumns([]); setFileInfo(null); setError(null); setStatus(null);
     const suffix = f.name.split('.').pop().toLowerCase();
     if (suffix === 'csv') {
@@ -144,12 +144,10 @@ export default function App() {
   // ── Formato resultado ────────────────────────
   const formatResultJS = (srv, reg, pagina = null) => {
     const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
-    const ufAbbr = String(uf.nome || '').length === 2 ? uf.nome : (String(uf.sigla || '').length === 2 ? uf.sigla : String(uf.sigla || '').slice(0, 2));
     return {
-      servidor: srv.nome || '', cpf: srv.cpf || '', dt_admissao: srv.dt_admissao || '',
-      beneficiario: bf.nome || '',
+      servidor: srv.nome || '', cpf: srv.cpf || '', beneficiario: bf.nome || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
-      municipio: mun.nomeIBGE || '', uf: ufAbbr,
+      municipio: mun.nomeIBGE || '', uf: String(uf.sigla || uf.nome || '').slice(0, 2),
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
       pagina,
@@ -171,11 +169,11 @@ export default function App() {
   // ── Constrói serverMap (Oracle ou CSV) ───────
   const buildServerMap = async () => {
     const map = new Map();
-    const add = (cpfRaw, nome, dt_admissao = '') => {
+    const add = (cpfRaw, nome) => {
       const cpf = normalizarCPF(cpfRaw);
       if (!cpf) return;
       const chave = chaveJS(cpf, nome);
-      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome, dt_admissao }); }
+      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome }); }
     };
 
     if (fonteServidores === 'oracle') {
@@ -187,7 +185,7 @@ export default function App() {
       if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
       const { servidores, total } = await res.json();
       setOracleInfo({ total });
-      servidores.forEach(s => add(s.cpf, s.nome, s.dt_admissao || ''));
+      servidores.forEach(s => add(s.cpf, s.nome));
       return { serverMap: map, totalServidores: total };
     } else {
       const { rows, sep, headers } = await parseCSV(file);
@@ -247,7 +245,7 @@ export default function App() {
             flush();
             if (regs.length < 15 || pagina >= MAX_PAGINAS) break;
             pagina++;
-            await delay(300);
+            await delay(150);
           }
           mesesConcluidos++;
           setStatus(prev => ({
@@ -335,19 +333,8 @@ export default function App() {
   const groupedResults = useMemo(() => {
     const map = new Map();
     for (const r of filteredResults) {
-      // Agrupamos pela chave (Nome + CPF) para garantir que é o mesmo servidor
-      const key = `${r.servidor}|${r.cpf}`;
-      if (!map.has(key)) {
-        map.set(key, { 
-          servidor: r.servidor, 
-          cpf: r.cpf, 
-          nis: r.nis || '', 
-          nisSet: new Set(), 
-          ocorrencias: [], 
-          totalValor: 0 
-        });
-      }
-      const g = map.get(key);
+      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
+      const g = map.get(r.cpf);
       if (!g.nis && r.nis) g.nis = r.nis;
       if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);
@@ -717,7 +704,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>Admissão</th><th>NIS</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
@@ -727,7 +714,6 @@ export default function App() {
                             <td className="td-num">{i + 1}</td>
                             <td className="td-bold">{row.servidor}</td>
                             <td className="td-mono">{row.cpf}</td>
-                            <td className="td-mono td-dim">{row.dt_admissao || '—'}</td>
                             <td className="td-mono td-dim">{row.nis || '—'}</td>
                             <td>{row.beneficiario}</td>
                             <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
@@ -747,7 +733,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>Admissão</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                        <th>Servidor</th><th>CPF</th><th>NIS</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
                       </tr></thead>
                       <tbody>
                         {groupedResults.map(g => {
@@ -765,7 +751,6 @@ export default function App() {
                                   {g.servidor}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
-                                <td className="td-mono td-dim">{g.ocorrencias[0]?.dt_admissao || '—'}</td>
                                 <td className="td-mono td-dim">
                                   {g.nis || '—'}
                                   {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos — possível falso positivo`}>⚠ {g.nisCount} NIS</span>}

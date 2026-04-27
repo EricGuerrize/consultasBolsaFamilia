@@ -143,9 +143,8 @@ export default function App() {
 
   // ── Formato resultado ────────────────────────
   const formatResultJS = (srv, reg, pagina = null) => {
-    // O Portal da Transparência às vezes inverte sigla (Mato Grosso) e nome (MT)
+    const bf = reg.beneficiarioNovoBolsaFamilia || {}, mun = reg.municipio || {}, uf = mun.uf || {};
     const ufAbbr = String(uf.nome || '').length === 2 ? uf.nome : (String(uf.sigla || '').length === 2 ? uf.sigla : String(uf.sigla || '').slice(0, 2));
-    
     return {
       servidor: srv.nome || '', cpf: srv.cpf || '', dt_admissao: srv.dt_admissao || '',
       beneficiario: bf.nome || '',

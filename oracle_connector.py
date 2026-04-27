@@ -11,7 +11,13 @@ class OracleConnector:
         self.user = os.getenv("ORACLE_USER")
         self.password = os.getenv("ORACLE_PASSWORD")
         self.dsn = os.getenv("ORACLE_DSN")
-        self.config_dir = os.getenv("ORACLE_CONFIG_DIR")  # caminho para pasta com tnsnames.ora
+        self.config_dir = os.getenv("ORACLE_CONFIG_DIR") or None
+
+    def _connect(self):
+        kwargs = dict(user=self.user, password=self.password, dsn=self.dsn)
+        if self.config_dir:
+            kwargs['config_dir'] = self.config_dir
+        return oracledb.connect(**kwargs)
         
     def get_servidores_data(self, ent_codigo='1118181', exercicio='2024'):
         """
@@ -124,8 +130,7 @@ class OracleConnector:
         """
 
         try:
-            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn,
-                                  config_dir=self.config_dir) as connection:
+            with self._connect() as connection:
                 df = pd.read_sql(query, connection)
                 return df
         except Exception as e:
@@ -139,8 +144,7 @@ class OracleConnector:
             return False, "Credenciais do Oracle não encontradas no arquivo .env"
 
         try:
-            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn,
-                                  config_dir=self.config_dir) as connection:
+            with self._connect() as connection:
                 with connection.cursor() as cursor:
                     cursor.execute("SELECT 1 FROM DUAL")
                     res = cursor.fetchone()
@@ -159,8 +163,7 @@ class OracleConnector:
             raise ValueError("Credenciais do Oracle não encontradas no arquivo .env")
 
         try:
-            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn,
-                                  config_dir=self.config_dir) as connection:
+            with self._connect() as connection:
                 df = pd.read_sql(query, connection)
                 return df
         except Exception as e:

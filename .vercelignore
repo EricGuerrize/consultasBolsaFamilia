@@ -1,0 +1,6 @@
+*.csv
+__pycache__/
+*.pyc
+.env
+firebase_service_account.json
+*.jsonl

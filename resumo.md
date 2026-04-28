@@ -17,6 +17,7 @@ Automação do pipeline multi-cidades e correção de bugs críticos de interfac
 - **Rondonópolis**: Processamento otimizado (Correção UF 'MT' verificada).
 - **Novas Funcionalidades**: Integração de **Cargo**, **Órgão** e **Data de Admissão** nos resultados.
 - **Auditoria de Cronologia**: Sistema agora alerta se o servidor recebeu o benefício após ter sido contratado.
+- **Correção de Agrupamento**: Implementada chave de identidade híbrida (CPF + Nome) e refinamento do cruzamento para usar as duas primeiras palavras do nome, eliminando falsos positivos e agrupamentos incorretos de homônimos ou registros com CPF zerado.
 
 ---
-*Status: Código com auditoria de cronologia e cargos implementado.*
+*Status: Código com auditoria de cronologia e agrupamento corrigido implementado.*

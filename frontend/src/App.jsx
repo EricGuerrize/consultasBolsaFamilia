@@ -75,8 +75,14 @@ export default function App() {
   // ── Utilitários ──────────────────────────────
   const normalizarCPF = cpf => { if (!cpf) return ''; const d = String(cpf).replace(/\D/g, ''); return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11); };
   const meioCPF = cpfRaw => { const raw = String(cpfRaw || ''); const full = raw.replace(/\D/g, ''); if (full.length === 11) return full.slice(3, 9); return raw.replace(/[xX*]/g, '').replace(/\D/g, '').slice(0, 6); };
-  const primeiroNome = nome => nome ? String(nome).trim().split(/\s+/)[0].toUpperCase() : '';
-  const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), pnome = primeiroNome(nome); return meio && pnome ? `${meio}|${pnome}` : ''; };
+  const nomeBase = nome => {
+    if (!nome) return '';
+    const partes = String(nome).trim().split(/\s+/);
+    // Pega as duas primeiras palavras para maior precisão (ex: DOUGLAS ARIEL)
+    const base = partes.slice(0, 2).join(' ').toUpperCase();
+    return base;
+  };
+  const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), nBase = nomeBase(nome); return meio && nBase ? `${meio}|${nBase}` : ''; };
   const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
   const delay = ms => new Promise(r => setTimeout(r, ms));
 
@@ -347,7 +353,7 @@ export default function App() {
   }, [allResults, searchFilter]);
 
   const totalValue   = useMemo(() => allResults.reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
-  const uniqueServers = useMemo(() => new Set(allResults.map(r => r.cpf)).size, [allResults]);
+  const uniqueServers = useMemo(() => new Set(allResults.map(r => `${r.cpf}|${r.servidor}`)).size, [allResults]);
   const topMes = useMemo(() => {
     const counts = {}; for (const r of allResults) counts[r.mes] = (counts[r.mes] || 0) + 1;
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
@@ -357,8 +363,9 @@ export default function App() {
   const groupedResults = useMemo(() => {
     const map = new Map();
     for (const r of filteredResults) {
-      if (!map.has(r.cpf)) map.set(r.cpf, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
-      const g = map.get(r.cpf);
+      const gKey = `${r.cpf}|${r.servidor}`;
+      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
+      const g = map.get(gKey);
       if (!g.nis && r.nis) g.nis = r.nis;
       if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);
@@ -370,7 +377,7 @@ export default function App() {
     return apenasMultiplos ? all.filter(g => g.ocorrencias.length > 5) : all;
   }, [filteredResults, apenasMultiplos]);
 
-  const toggleRow = cpf => setExpandedRows(prev => { const next = new Set(prev); next.has(cpf) ? next.delete(cpf) : next.add(cpf); return next; });
+  const toggleRow = gKey => setExpandedRows(prev => { const next = new Set(prev); next.has(gKey) ? next.delete(gKey) : next.add(gKey); return next; });
 
   const exportCSV = () => {
     if (!allResults.length) return;
@@ -771,12 +778,13 @@ export default function App() {
                       </tr></thead>
                       <tbody>
                         {groupedResults.map(g => {
-                          const expanded = expandedRows.has(g.cpf);
+                          const gKey = `${g.cpf}|${g.servidor}`;
+                          const expanded = expandedRows.has(gKey);
                           const mesesG = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
                           const alerta = g.ocorrencias.length > 5;
                           return (
-                            <React.Fragment key={g.cpf}>
-                              <tr className={`row-group${expanded ? ' open' : ''}${alerta ? ' row-alert' : ''}`} onClick={() => toggleRow(g.cpf)}>
+                            <React.Fragment key={gKey}>
+                              <tr className={`row-group${expanded ? ' open' : ''}${alerta ? ' row-alert' : ''}`} onClick={() => toggleRow(gKey)}>
                                 <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
                                   {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                 </td>

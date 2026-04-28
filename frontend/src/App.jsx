@@ -41,6 +41,7 @@ export default function App() {
     modo: 'municipio', ibge: '', api_key: '', 
     col_cpf: '', col_nome: '', col_cargo: '', col_admissao: '',
   });
+  const [showMapping, setShowMapping] = useState(false);
 
   // ── Resultados ───────────────────────────────
   const [fase, setFase] = useState('config');
@@ -116,19 +117,21 @@ export default function App() {
     if (!f) return;
     if (f.size > 10 * 1024 * 1024) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite: 10 MB.`); return; }
     setFile(f); setColumns([]); setFileInfo(null); setError(null); setStatus(null);
-    const suffix = f.name.split('.').pop().toLowerCase();
+    const detect = hdrs => {
+      const find = (rx, blacklist = []) => hdrs.find(c => rx.test(c) && !blacklist.includes(c)) || '';
+      const cpf = find(/pess_cpf|cpf|doc/i);
+      const nome = find(/pess_nome|nome|servidor/i, [cpf]);
+      const cargo = find(/desc_cargo|cargo|fun[cç][aã]o/i, [cpf, nome]);
+      const adm = find(/dt_admissao|admiss[aã]o|contrat/i, [cpf, nome, cargo]);
+      return { col_cpf: cpf, col_nome: nome, col_cargo: cargo, col_admissao: adm };
+    };
+
     if (suffix === 'csv') {
       try {
         const { headers, total } = await parseCSV(f);
         setColumns(headers);
         setFileInfo({ total, filename: f.name });
-        setConfig(prev => ({
-          ...prev,
-          col_cpf: headers.find(c => /cpf/i.test(c)) || '',
-          col_nome: headers.find(c => /nome/i.test(c)) || '',
-          col_cargo: headers.find(c => /cargo|fun[cç][aã]o/i.test(c)) || '',
-          col_admissao: headers.find(c => /admiss[aã]o|contrat/i.test(c)) || '',
-        }));
+        setConfig(prev => ({ ...prev, ...detect(headers) }));
       } catch (err) { setError('Erro ao ler CSV: ' + err.message); }
     } else {
       const fd = new FormData(); fd.append('file', f);
@@ -138,13 +141,7 @@ export default function App() {
         const data = await res.json();
         setColumns(data.columns);
         setFileInfo({ total: data.total, filename: data.filename });
-        setConfig(prev => ({
-          ...prev,
-          col_cpf: data.columns.find(c => /cpf/i.test(c)) || '',
-          col_nome: data.columns.find(c => /nome/i.test(c)) || '',
-          col_cargo: data.columns.find(c => /cargo|fun[cç][aã]o/i.test(c)) || '',
-          col_admissao: data.columns.find(c => /admiss[aã]o|contrat/i.test(c)) || '',
-        }));
+        setConfig(prev => ({ ...prev, ...detect(data.columns) }));
       } catch (err) { setError(err.message); }
     }
   };
@@ -501,29 +498,43 @@ export default function App() {
                     </div>
                   </div>
                   {columns.length > 0 && (
-                    <div className="mapping-box">
-                      <div className="mapping-title">Mapeamento de colunas</div>
-                      <div className="field" style={{ marginBottom: '0.7rem' }}>
-                        <label>Coluna de CPF *</label>
-                        <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
-                          <option value="">— Selecione —</option>
-                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div className="field" style={{ marginBottom: '0.7rem' }}>
-                        <label>Coluna de Cargo</label>
-                        <select value={config.col_cargo} onChange={e => setConfig({ ...config, col_cargo: e.target.value })}>
-                          <option value="">— Selecione —</option>
-                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
-                      <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Coluna de Admissão</label>
-                        <select value={config.col_admissao} onChange={e => setConfig({ ...config, col_admissao: e.target.value })}>
-                          <option value="">— Selecione —</option>
-                          {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                        </select>
-                      </div>
+                    <div style={{ marginTop: '0.5rem' }}>
+                      <button type="button" className="advanced-toggle" style={{ fontSize: '0.68rem', opacity: 0.8 }} onClick={() => setShowMapping(a => !a)}>
+                        <Settings size={10} /> {showMapping ? 'Ocultar mapeamento' : 'Ajustar mapeamento de colunas'}
+                      </button>
+                      
+                      {showMapping && (
+                        <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
+                          <div className="field" style={{ marginBottom: '0.7rem' }}>
+                            <label>Coluna de CPF *</label>
+                            <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
+                              <option value="">— Selecione —</option>
+                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="field" style={{ marginBottom: '0.7rem' }}>
+                            <label>Coluna de Nome</label>
+                            <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
+                              <option value="">— Selecione —</option>
+                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="field" style={{ marginBottom: '0.7rem' }}>
+                            <label>Coluna de Cargo</label>
+                            <select value={config.col_cargo} onChange={e => setConfig({ ...config, col_cargo: e.target.value })}>
+                              <option value="">— Selecione —</option>
+                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                          <div className="field" style={{ marginBottom: 0 }}>
+                            <label>Coluna de Admissão</label>
+                            <select value={config.col_admissao} onChange={e => setConfig({ ...config, col_admissao: e.target.value })}>
+                              <option value="">— Selecione —</option>
+                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </>

@@ -117,6 +117,7 @@ export default function App() {
     if (!f) return;
     if (f.size > 10 * 1024 * 1024) { setError(`Arquivo muito grande (${(f.size / 1024 / 1024).toFixed(1)} MB). Limite: 10 MB.`); return; }
     setFile(f); setColumns([]); setFileInfo(null); setError(null); setStatus(null);
+    const suffix = f.name.split('.').pop().toLowerCase();
     const detect = hdrs => {
       const find = (rx, blacklist = []) => hdrs.find(c => rx.test(c) && !blacklist.includes(c)) || '';
       const cpf = find(/pess_cpf|cpf|doc/i);

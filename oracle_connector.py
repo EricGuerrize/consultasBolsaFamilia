@@ -14,16 +14,23 @@ class OracleConnector:
         self.config_dir = os.getenv("ORACLE_CONFIG_DIR")
         
     def _get_connection(self):
-        """Retorna uma conexão no modo Thin."""
+        """Retorna uma conexão no modo Thin, limpando variáveis que podem causar conflito em serverless."""
+        # Em alguns ambientes serverless (Vercel/Lambda), LD_LIBRARY_PATH pode causar conflito com o modo Thin
+        if "LD_LIBRARY_PATH" in os.environ:
+            del os.environ["LD_LIBRARY_PATH"]
+
         conn_params = {
             "user": self.user,
             "password": self.password,
-            "dsn": self.dsn
+            "dsn": self.dsn,
+            "expire_time": 2, 
+            "tcp_connect_timeout": 15, # 15 segundos para conectar
         }
-        # Só usa config_dir se o diretório realmente existir (ex: tnsnames.ora)
+        # Só usa config_dir se o diretório realmente existir (ex: tnsnames.ora/wallet)
         if self.config_dir and os.path.isdir(self.config_dir):
             conn_params["config_dir"] = self.config_dir
             
+        # Força explicitamente o modo thin
         return oracledb.connect(**conn_params)
 
     def get_servidores_data(self, ent_codigo='1118181', exercicio='2024'):

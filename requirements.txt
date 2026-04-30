@@ -5,5 +5,5 @@ python-dotenv
 fastapi
 uvicorn
 python-multipart
-oracledb
+oracledb>=2.1.0
 firebase-admin

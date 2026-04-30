@@ -12,6 +12,12 @@ from dotenv import load_dotenv
 # Permite importar oracle_connector que está na pasta pai
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+try:
+    from oracle_connector import OracleConnector
+    oracle_initialized = True
+except ImportError:
+    oracle_initialized = False
+
 load_dotenv()
 
 app = FastAPI(title="Bolsa Família x Servidores API")
@@ -54,8 +60,10 @@ async def get_servidores(request: Request):
     ent_codigo = body.get("ent_codigo", "1118181")
     exercicio  = body.get("exercicio", "2024")
 
+    if not oracle_initialized:
+        raise HTTPException(status_code=503, detail="Módulo oracle_connector não pôde ser carregado. Verifique as dependências.")
+
     try:
-        from oracle_connector import OracleConnector
         oracle = OracleConnector()
         df = oracle.get_servidores_data(ent_codigo=ent_codigo, exercicio=exercicio)
         df.columns = [c.lower() for c in df.columns]
@@ -71,9 +79,8 @@ async def get_servidores(request: Request):
         )
         return {"servidores": servidores, "total": len(servidores)}
 
-    except ImportError:
-        raise HTTPException(status_code=503, detail="oracledb não instalado no servidor")
     except Exception as e:
+        print(f"ERRO API /api/servidores: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro Oracle: {str(e)}")
 
 

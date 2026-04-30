@@ -629,10 +629,16 @@ export default function App() {
                 <Settings size={11} /> Configurações avançadas
               </button>
               {showAdvanced && (
-                <div className="field" style={{ marginBottom: '0.75rem' }}>
-                  <label>Chave de API (sobrepõe a do servidor)</label>
-                  <input type="password" placeholder="Chave do Portal da Transparência" value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })} />
-                </div>
+                <>
+                  <div className="field" style={{ marginBottom: '0.75rem' }}>
+                    <label>Chave de API (sobrepõe a do servidor)</label>
+                    <input type="password" placeholder="Chave do Portal da Transparência" value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })} />
+                  </div>
+                  <div className="field" style={{ marginBottom: '0.75rem' }}>
+                    <label>URL da API (para uso local)</label>
+                    <input type="text" placeholder="Ex: http://localhost:8000" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                  </div>
+                </>
               )}
 
               <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.75rem', color: modoTeste ? 'var(--amber)' : 'var(--text-3)', marginBottom: '1rem', fontWeight: 500 }}>

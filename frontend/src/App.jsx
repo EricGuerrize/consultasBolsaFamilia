@@ -50,14 +50,20 @@ export default function App() {
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [apenasMultiplos, setApenasMultiplos] = useState(false);
   const [searchLogs, setSearchLogs] = useState([]);
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('api_url') || '');
   const cancelRef = useRef(false);
+
+  useEffect(() => {
+    localStorage.setItem('api_url', baseUrl);
+  }, [baseUrl]);
 
   // ── Health checks ────────────────────────────
   useEffect(() => {
-    fetch('/api/health')
+    const url = baseUrl ? `${baseUrl}/api/health` : '/api/health';
+    fetch(url)
       .then(r => r.ok ? setApiHealth('ok') : setApiHealth('error'))
       .catch(() => setApiHealth('error'));
-  }, []);
+  }, [baseUrl]);
 
   useEffect(() => {
     fetch('https://servicodados.ibge.gov.br/api/v1/localidades/municipios?orderBy=nome')
@@ -149,7 +155,8 @@ export default function App() {
     } else {
       const fd = new FormData(); fd.append('file', f);
       try {
-        const res = await fetch('/api/upload', { method: 'POST', body: fd });
+        const url = baseUrl ? `${baseUrl}/api/upload` : '/api/upload';
+        const res = await fetch(url, { method: 'POST', body: fd });
         if (!res.ok) throw new Error('Erro ao ler arquivo');
         const data = await res.json();
         setColumns(data.columns);
@@ -196,7 +203,8 @@ export default function App() {
 
   // ── Proxy API Portal da Transparência ────────
   const proxyFetch = async (endpoint, params, retries = 3) => {
-    const res = await fetch('/api/proxy', {
+    const url = baseUrl ? `${baseUrl}/api/proxy` : '/api/proxy';
+    const res = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ endpoint, params, api_key: config.api_key }),
     });
@@ -218,7 +226,8 @@ export default function App() {
 
     if (fonteServidores === 'oracle') {
       setStatus(prev => ({ ...prev, message: 'Carregando servidores do Oracle...' }));
-      const res = await fetch('/api/servidores', {
+      const url = baseUrl ? `${baseUrl}/api/servidores` : '/api/servidores';
+      const res = await fetch(url, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(oracleConfig),
       });

@@ -97,9 +97,16 @@ async def upload_file(file: UploadFile = File(...)):
 async def proxy_portal(request: Request):
     """Proxy leve: repassa UMA página da API do Portal da Transparência."""
     body = await request.json()
-    real_api_key = (body.get("api_key") or os.getenv("CHAVE_API_DADOS", "")).strip()
+    # Tenta carregar de várias fontes: body -> env(CHAVE_API_DADOS) -> env(API_KEY)
+    real_api_key = (
+        body.get("api_key") or 
+        os.getenv("CHAVE_API_DADOS") or 
+        os.getenv("API_KEY") or 
+        ""
+    ).strip()
+    
     if not real_api_key:
-        raise HTTPException(status_code=401, detail="Chave de API não fornecida")
+        raise HTTPException(status_code=401, detail="Chave de API não configurada. Verifique o arquivo .env ou as configurações avançadas.")
 
     endpoint = body.get("endpoint")
     params   = body.get("params", {})

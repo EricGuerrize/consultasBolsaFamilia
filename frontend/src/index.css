@@ -186,7 +186,9 @@ body {
   border: 1px solid rgba(37,99,235,0.18);
   letter-spacing: 0.01em;
   vertical-align: middle;
+  text-transform: uppercase;
 }
+.label-tag.api { background: #eee; color: #666; border-color: #ddd; }
 
 /* ── Form elements ────────────────────────────────────── */
 .field { margin-bottom: 1.1rem; }
@@ -666,7 +668,9 @@ tbody tr:hover td { background: var(--blue-faint); }
 .td-mono   { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.77rem; letter-spacing: 0.02em; }
 .td-bold   { font-weight: 600; color: var(--text); }
 .td-valor  { font-weight: 700; color: var(--red); white-space: nowrap; }
-.td-dim    { color: var(--text-2); font-size: 0.78rem; }
+.td-dim    { color: var(--text-3); font-size: 0.78rem; }
+.row-dim td { opacity: 0.6; grayscale: 100%; filter: grayscale(1); }
+.row-dim:hover td { opacity: 1; filter: none; }
 
 .row-group { cursor: pointer; }
 .row-group:hover td { background: #f0f5ff !important; }

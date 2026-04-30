@@ -123,13 +123,32 @@ class OracleConnector:
         ORDER BY sub.fpgto_anoreferencia, sub.fpgto_mesreferencia
         """
 
-        try:
-            with oracledb.connect(user=self.user, password=self.password, dsn=self.dsn,
-                                  config_dir=self.config_dir) as connection:
-                df = pd.read_sql(query, connection)
-                return df
-        except Exception as e:
-            raise RuntimeError(f"Erro ao conectar ou executar query no Oracle: {e}")
+        import time
+        max_retries = 3
+        last_error = None
+        
+        for attempt in range(max_retries):
+            try:
+                # Se config_dir não estiver setado, não passa para o connect (evita erros no modo Thin)
+                conn_params = {
+                    "user": self.user,
+                    "password": self.password,
+                    "dsn": self.dsn
+                }
+                if self.config_dir and os.path.exists(self.config_dir):
+                    conn_params["config_dir"] = self.config_dir
+
+                with oracledb.connect(**conn_params) as connection:
+                    df = pd.read_sql(query, connection)
+                    return df
+            except Exception as e:
+                last_error = e
+                if "Device or resource busy" in str(e) or "[Errno 16]" in str(e):
+                    time.sleep(1) # Espera um pouco se o recurso estiver ocupado
+                    continue
+                break
+        
+        raise RuntimeError(f"Erro ao conectar ou executar query no Oracle: {last_error}")
 
     def test_connection(self):
         """

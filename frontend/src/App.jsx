@@ -46,8 +46,10 @@ export default function App() {
   // ── Resultados ───────────────────────────────
   const [fase, setFase] = useState('config');
   const [agrupado, setAgrupado] = useState(false);
+  const [exibirTudo, setExibirTudo] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [apenasMultiplos, setApenasMultiplos] = useState(false);
+  const [searchLogs, setSearchLogs] = useState([]);
   const cancelRef = useRef(false);
 
   // ── Health checks ────────────────────────────
@@ -76,14 +78,24 @@ export default function App() {
   // ── Utilitários ──────────────────────────────
   const normalizarCPF = cpf => { if (!cpf) return ''; const d = String(cpf).replace(/\D/g, ''); return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11); };
   const meioCPF = cpfRaw => { const raw = String(cpfRaw || ''); const full = raw.replace(/\D/g, ''); if (full.length === 11) return full.slice(3, 9); return raw.replace(/[xX*]/g, '').replace(/\D/g, '').slice(0, 6); };
-  const nomeBase = nome => {
+  const normalizarNome = nome => {
     if (!nome) return '';
-    const partes = String(nome).trim().split(/\s+/);
-    // Pega as duas primeiras palavras para maior precisão (ex: DOUGLAS ARIEL)
-    const base = partes.slice(0, 2).join(' ').toUpperCase();
-    return base;
+    return String(nome)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
   };
-  const chaveJS = (cpfRaw, nome) => { const meio = meioCPF(cpfRaw), nBase = nomeBase(nome); return meio && nBase ? `${meio}|${nBase}` : ''; };
+  const mascararCPF = cpfRaw => {
+    const c = normalizarCPF(cpfRaw);
+    if (c.length !== 11) return c;
+    return `***.${c.slice(3, 6)}.${c.slice(6, 9)}-**`;
+  };
+  const chaveJS = (cpfRaw, nome) => {
+    const nomeNorm = normalizarNome(nome);
+    const cpfMasc = cpfRaw.includes('*') ? cpfRaw : mascararCPF(cpfRaw);
+    return nomeNorm && cpfMasc ? `${nomeNorm}|${cpfMasc}` : '';
+  };
   const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
   const delay = ms => new Promise(r => setTimeout(r, ms));
 
@@ -232,7 +244,8 @@ export default function App() {
     if (fonteServidores === 'csv' && !file) return;
     setLoading(true); setError(null);
     setStatus({ status: 'processing', progress: 0, result: [], message: 'Iniciando...' });
-    setFase('processing'); setSearchFilter(''); setAgrupado(false); setExpandedRows(new Set());
+    setSearchLogs(['Iniciando consulta...']);
+    setFase('processing'); setSearchFilter(''); setAgrupado(false); setExibirTudo(false); setExpandedRows(new Set());
     cancelRef.current = false;
 
     try {
@@ -261,13 +274,21 @@ export default function App() {
             for (const reg of regs) {
               const bf = reg.beneficiarioNovoBolsaFamilia || {};
               const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
-              if (chave && serverMap.has(chave)) {
+              const isMatch = chave && serverMap.has(chave);
+              
+              if (isMatch) {
                 for (const srv of serverMap.get(chave)) {
                   const deduKey = `${srv.cpf}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                   if (seenResults.has(deduKey)) continue;
                   seenResults.add(deduKey);
-                  allResults.push(formatResultJS(srv, reg, pagina));
+                  allResults.push({ ...formatResultJS(srv, reg, pagina), isMatch: true });
                 }
+              } else {
+                // Adiciona como não match para o modo "Exibir Tudo"
+                const deduKey = `no-match|${bf.nis}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
+                if (seenResults.has(deduKey)) continue;
+                seenResults.add(deduKey);
+                allResults.push({ ...formatResultJS({ nome: bf.nome, cpf: bf.cpfFormatado }, reg, pagina), isMatch: false });
               }
             }
             flush();
@@ -345,13 +366,15 @@ export default function App() {
   // ── Dados derivados ──────────────────────────
   const allResults = status?.result || [];
   const filteredResults = useMemo(() => {
-    if (!searchFilter) return allResults;
+    let filtered = allResults;
+    if (!exibirTudo) filtered = filtered.filter(r => r.isMatch);
+    if (!searchFilter) return filtered;
     const q = searchFilter.toLowerCase();
-    return allResults.filter(r => r.servidor?.toLowerCase().includes(q) || r.cpf?.includes(q) || r.municipio?.toLowerCase().includes(q) || r.beneficiario?.toLowerCase().includes(q));
-  }, [allResults, searchFilter]);
+    return filtered.filter(r => r.servidor?.toLowerCase().includes(q) || r.cpf?.includes(q) || r.municipio?.toLowerCase().includes(q) || r.beneficiario?.toLowerCase().includes(q));
+  }, [allResults, searchFilter, exibirTudo]);
 
-  const totalValue   = useMemo(() => allResults.reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
-  const uniqueServers = useMemo(() => new Set(allResults.map(r => `${r.cpf}|${r.servidor}`)).size, [allResults]);
+  const totalValue   = useMemo(() => allResults.filter(r => r.isMatch).reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
+  const uniqueServers = useMemo(() => new Set(allResults.filter(r => r.isMatch).map(r => `${r.cpf}|${r.servidor}`)).size, [allResults]);
   const topMes = useMemo(() => {
     const counts = {}; for (const r of allResults) counts[r.mes] = (counts[r.mes] || 0) + 1;
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
@@ -700,6 +723,10 @@ export default function App() {
                   onClick={() => { setAgrupado(a => !a); setExpandedRows(new Set()); }}>
                   <Users size={12} /> {agrupado ? 'Ver todos' : 'Agrupar por servidor'}
                 </button>
+                <button className={`btn btn-sm ${exibirTudo ? 'btn-active' : 'btn-ghost'}`}
+                  onClick={() => setExibirTudo(a => !a)}>
+                  <Search size={12} /> {exibirTudo ? 'Ocultar sem match' : 'Mostrar tudo (API)'}
+                </button>
                 {agrupado && (
                   <button className={`btn btn-sm ${apenasMultiplos ? 'btn-danger-ghost btn-active' : 'btn-ghost'}`}
                     onClick={() => setApenasMultiplos(a => !a)}
@@ -760,9 +787,13 @@ export default function App() {
                       </tr></thead>
                       <tbody>
                         {filteredResults.map((row, i) => (
-                          <tr key={i}>
+                          <tr key={i} className={!row.isMatch ? 'row-dim' : ''}>
                              <td className="td-num">{i + 1}</td>
-                             <td className="td-bold">{row.servidor}</td>
+                             <td className="td-bold">
+                               {row.servidor}
+                               {!row.isMatch && <span className="label-tag api" style={{ marginLeft: 8 }}>API</span>}
+                               {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
+                             </td>
                              <td className="td-mono">{row.cpf}</td>
                              <td>
                                <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{row.cargo || '—'}</div>

@@ -200,6 +200,8 @@ export default function App() {
       municipio: mun.nomeIBGE || '', uf: ufAbbr,
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
+      tipo_ato: srv.tipo_ato || '',
+      matricula: srv.pess_matricula || '',
       pagina,
       isIrregular: (() => {
         const adm = srv.admissao || srv['Admissão'] || '';
@@ -429,7 +431,7 @@ export default function App() {
     const map = new Map();
     for (const r of filteredResults) {
       const gKey = `${r.cpf}|${r.servidor}`;
-      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
+      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, matricula: r.matricula, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
       const g = map.get(gKey);
       if (!g.nis && r.nis) g.nis = r.nis;
       if (r.nis) g.nisSet.add(r.nis);
@@ -881,7 +883,11 @@ export default function App() {
                                {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
                                {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
                              </td>
-                             <td className="td-mono">{row.cpf}</td>
+                                                           <td className="td-mono">
+                                <div>{row.cpf || g.cpf}</div>
+                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula || g.matricula || '—'}</div>
+                              </td>
+
                              <td>
                                <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{row.cargo || '—'}</div>
                                <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Adm: {row.admissao || '—'}</div>
@@ -890,8 +896,13 @@ export default function App() {
                              <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
                              <td className="td-dim">{fmtMes(row.mes)}</td>
                              {exibirIrregulares && (
-                                <td style={{ fontSize: '0.72rem', color: 'var(--red)', fontWeight: 500 }}>
-                                  {row.isIrregular ? `Ref. ${fmtMes(row.mes)} após admissão (${row.admissao})` : '—'}
+                                <td className="td-dim">
+                                  {row.isIrregular ? (
+                                    <>
+                                      <div style={{ color: 'var(--red)', fontWeight: 600 }}>Ref. {fmtMes(row.mes)} após admissão</div>
+                                      <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>Ato: {row.tipo_ato || 'Nomeação/Posse'} ({row.admissao})</div>
+                                    </>
+                                  ) : '—'}
                                 </td>
                               )}
                              <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
@@ -961,7 +972,7 @@ export default function App() {
                                     <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)}</td>
                                     {exibirIrregulares && (
                                       <td style={{ fontSize: '0.72rem', color: 'var(--red)' }}>
-                                        Competência {fmtMes(o.mes)} pós-admissão
+                                        Competência {fmtMes(o.mes)} pós-{o.tipo_ato || 'admissão'} ({o.admissao})
                                       </td>
                                     )}
                                     <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>

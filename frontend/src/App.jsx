@@ -486,10 +486,10 @@ export default function App() {
   const Topbar = () => (
     <div className="topbar">
       <div className="topbar-brand">
-        <ShieldCheck size={18} color="#60a5fa" />
+        <ShieldCheck size={20} color="var(--cyan)" />
         Auditoria Bolsa Família
-        <span>|</span>
-        <span style={{ opacity: 0.6, fontSize: '0.78rem' }}>Portal da Transparência</span>
+        <span>/</span>
+        <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>Control Panel</span>
       </div>
       <div className="topbar-right">
         {fase !== 'config' && (
@@ -497,11 +497,6 @@ export default function App() {
             <RotateCcw size={12} /> Nova Consulta
           </button>
         )}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', opacity: 0.7 }}>
-          {apiHealth === 'ok'       && <><div className="dot green" /> API conectada</>}
-          {apiHealth === 'error'    && <><div className="dot red"   /> API offline</>}
-          {apiHealth === 'checking' && <><div className="dot amber" /> Verificando</>}
-        </div>
       </div>
     </div>
   );
@@ -518,7 +513,10 @@ export default function App() {
         <div className="layout" style={{ marginTop: error ? '1rem' : '1.75rem' }}>
           <div className="config-panel">
             <div className="config-panel-header">
-              <span>Configurar consulta</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={16} color="var(--cyan)" />
+                Configurar Auditoria
+              </div>
             </div>
             <div className="config-panel-body">
 
@@ -738,22 +736,22 @@ export default function App() {
       <Topbar />
       <div className="page fade-up">
         <div className="stats-row cols-4" style={{ marginTop: '1.5rem' }}>
-          <div className="stat-card">
+          <div className="stat-card stagger-1">
             <div className="stat-label">Servidores únicos</div>
             <div className={`stat-value${uniqueServers > 0 ? ' danger' : ''}`}>{uniqueServers.toLocaleString('pt-BR')}</div>
             <div className="stat-sub">com ocorrências no BF</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stagger-2">
             <div className="stat-label">Total de alertas</div>
             <div className={`stat-value${allResults.length > 0 ? ' danger' : ''}`}>{allResults.length.toLocaleString('pt-BR')}</div>
             <div className="stat-sub">registros de saque</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stagger-3">
             <div className="stat-label">Irregularidades</div>
             <div className={`stat-value ${irrCount > 0 ? 'danger' : 'muted'}`}>{irrCount || '—'}</div>
             <div className="stat-sub">casos detectados</div>
           </div>
-          <div className="stat-card">
+          <div className="stat-card stagger-4">
             <div className="stat-label">Valor em Risco</div>
             <div className={`stat-value ${irrValue > 0 ? 'danger' : 'muted'}`} style={{ fontSize: '1.25rem' }}>
               {irrValue > 0 ? `R$ ${irrValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
@@ -859,7 +857,7 @@ export default function App() {
                                {row.servidor}
                                {!row.isMatch && <span className="label-tag api" style={{ marginLeft: 8 }}>API</span>}
                                {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
-                               {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
+                               {row.isIrregular && <span className="label-tag irregular" style={{ marginLeft: 8 }}>IRREGULAR</span>}
                              </td>
                              <td className="td-mono">{row.cpf}</td>
                              <td>
@@ -901,7 +899,7 @@ export default function App() {
                                 <td className="td-bold">
                                   {alerta && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ {g.ocorrencias.length}×</span>}
                                   {g.servidor}
-                                  {g.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
+                                  {g.isIrregular && <span className="label-tag irregular" style={{ marginLeft: 8 }}>IRREGULAR</span>}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
                                 <td>

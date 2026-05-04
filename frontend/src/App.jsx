@@ -198,6 +198,17 @@ export default function App() {
       mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
       pagina,
+      isIrregular: (() => {
+        const adm = srv.admissao || srv['Admissão'] || '';
+        if (!adm || adm.length < 10) return false;
+        try {
+          const [d, m, y] = adm.split('/');
+          const admMes = parseInt(`${y}${m}`);
+          const refMes = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+          const refMesInt = parseInt(refMes);
+          return admMes <= refMesInt;
+        } catch { return false; }
+      })()
     };
   };
 
@@ -825,6 +836,7 @@ export default function App() {
                                {row.servidor}
                                {!row.isMatch && <span className="label-tag api" style={{ marginLeft: 8 }}>API</span>}
                                {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
+                               {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
                              </td>
                              <td className="td-mono">{row.cpf}</td>
                              <td>

@@ -72,6 +72,7 @@ async def get_servidores(request: Request):
         df["pess_cpf"] = df["pess_cpf"].apply(_normalizar_cpf)
         df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
 
+        df = df.fillna("")
         servidores = (
             df[["pess_cpf", "pess_nome", "cfpess_nome", "pess_data_admissao"]]
             .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome", "cfpess_nome": "cargo", "pess_data_admissao": "admissao"})

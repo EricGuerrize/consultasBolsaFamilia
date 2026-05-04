@@ -74,7 +74,7 @@ async def get_servidores(request: Request):
 
         df = df.fillna("")
         servidores = (
-            df[["cpf", "nome", "matricula", "admissao", "tipo_ato", "cargo"]]
+            df[["cpf", "nome", "matricula", "admissao", "tipo_ato"]]
             .to_dict(orient="records")
         )
         return {"servidores": servidores, "total": len(servidores)}

@@ -869,7 +869,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>Cargo / Admissão</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th>{exibirIrregulares && <th>Justificativa</th>}<th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
@@ -888,10 +888,6 @@ export default function App() {
                                 <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula || '—'}</div>
                               </td>
 
-                             <td>
-                               <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{row.cargo || '—'}</div>
-                               <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Adm: {row.admissao || '—'}</div>
-                             </td>
                              <td>{row.beneficiario}</td>
                              <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
                              <td className="td-dim">{fmtMes(row.mes)}</td>
@@ -942,10 +938,6 @@ export default function App() {
                                    <div>{g.cpf}</div>
                                    <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {g.matricula || '—'}</div>
                                  </td>
-                                <td>
-                                  <div style={{ fontSize: '0.7rem', fontWeight: 600 }}>{g.ocorrencias[0].cargo || '—'}</div>
-                                  <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>{g.ocorrencias[0].orgao || '—'}</div>
-                                </td>
                                 <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
                                 <td className="td-dim">{mesesG.join(' · ')}</td>
                                 {exibirIrregulares && (
@@ -964,10 +956,6 @@ export default function App() {
                                   <tr key={i} className="row-sub">
                                     <td></td>
                                     <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>{o.beneficiario || '—'}</td>
-                                    <td>
-                                      {o.admissao && <div style={{ fontSize: '0.7rem', color: isAfter ? 'var(--red)' : 'var(--green)', fontWeight: 600 }}>Adm: {o.admissao} {isAfter ? '⚠ Posterior' : '✓ Anterior'}</div>}
-                                      <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>NIS: {o.nis || '—'}</div>
-                                    </td>
                                     <td className="td-dim" style={{ fontSize: '0.78rem' }}>
                                       {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
                                       {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}

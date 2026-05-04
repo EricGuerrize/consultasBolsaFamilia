@@ -73,8 +73,8 @@ async def get_servidores(request: Request):
         df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
 
         servidores = (
-            df[["pess_cpf", "pess_nome"]]
-            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome"})
+            df[["pess_cpf", "pess_nome", "cfpess_nome"]]
+            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome", "cfpess_nome": "cargo"})
             .to_dict(orient="records")
         )
         return {"servidores": servidores, "total": len(servidores)}
@@ -82,6 +82,22 @@ async def get_servidores(request: Request):
     except Exception as e:
         print(f"ERRO API /api/servidores: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Erro Oracle: {str(e)}")
+
+@app.get("/api/debug_cols")
+async def debug_cols():
+    try:
+        oracle = OracleConnector()
+        with oracle._get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT column_name FROM all_tab_columns WHERE table_name = 'PESSOAL' AND owner = 'APLIC2008'")
+                pessoal_cols = [row[0] for row in cursor.fetchall()]
+                
+                cursor.execute("SELECT column_name FROM all_tab_columns WHERE table_name = 'CARGO_FUNCAO_PESSOAL_UG' AND owner = 'APLIC2008'")
+                cfug_cols = [row[0] for row in cursor.fetchall()]
+                
+        return {"pessoal": pessoal_cols, "cfug": cfug_cols}
+    except Exception as e:
+        return {"error": str(e)}
 
 
 @app.post("/api/upload")

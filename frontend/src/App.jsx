@@ -210,7 +210,13 @@ export default function App() {
     });
     if (res.status === 429) { await delay(2000); return proxyFetch(endpoint, params, retries); }
     if ((res.status === 502 || res.status === 504) && retries > 0) { await delay(3000); return proxyFetch(endpoint, params, retries - 1); }
-    if (!res.ok) { const t = await res.text(); let msg = t; try { msg = JSON.parse(t)?.detail || t; } catch {} throw new Error(msg); }
+    if (!res.ok) { 
+      if (res.status === 400 && endpoint === 'municipio') {
+        console.warn(`Portal API retornou 400 para a página. Ignorando.`);
+        return [];
+      }
+      const t = await res.text(); let msg = t; try { msg = JSON.parse(t)?.detail || t; } catch {} throw new Error(msg); 
+    }
     return res.json();
   };
 
@@ -234,7 +240,18 @@ export default function App() {
       if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
       const { servidores, total } = await res.json();
       setOracleInfo({ total });
-      servidores.forEach(s => add(s.cpf, s.nome));
+      servidores.forEach(s => {
+        const chave = chaveJS(s.cpf, s.nome);
+        if (chave) {
+          if (!map.has(chave)) map.set(chave, []);
+          map.get(chave).push({ 
+            cpf: s.cpf, 
+            nome: s.nome, 
+            cargo: s.cargo || '',
+            admissao: s.admissao || ''
+          });
+        }
+      });
       return { serverMap: map, totalServidores: total };
     } else {
       const { rows, sep, headers } = await parseCSV(file);

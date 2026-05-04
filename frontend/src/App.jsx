@@ -640,16 +640,17 @@ export default function App() {
               <div className="field">
                 <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
                   <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
-                  <Settings size={11} /> Conexão com a API (ngrok)
+                  <Database size={11} /> Endereço do Motor (API)
                 </button>
                 {showAdvanced && (
                   <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
                     <div className="field" style={{ marginBottom: 0 }}>
-                      <label>URL da API Local ou Remota</label>
-                      <input type="text" placeholder="Ex: https://xyz.ngrok.app ou http://localhost:8000" value={baseUrl}
+                      <label>URL da API (Local ou Remota)</label>
+                      <input type="text" placeholder="http://localhost:8000" value={baseUrl}
                         onChange={e => setBaseUrl(e.target.value)} />
-                      <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: '6px' }}>
-                        Deixe em branco para usar o padrão (localhost:8000). Use para acessar de outras máquinas.
+                      <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.4' }}>
+                        • Use <strong>http://localhost:8000</strong> se estiver nesta máquina.<br/>
+                        • Cole o link do <strong>ngrok</strong> se estiver em outra máquina.
                       </p>
                     </div>
                   </div>

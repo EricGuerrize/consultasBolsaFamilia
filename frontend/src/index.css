@@ -713,6 +713,81 @@ tbody tr:hover td { background: var(--blue-faint); }
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
+/* ── Paginação ──────────────────────────────── */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 1.5rem 0;
+  padding: 1rem;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.pagination-select {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg-1);
+  color: var(--text-1);
+  font-size: 0.85rem;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.pagination-select:hover {
+  border-color: var(--primary);
+}
+
+.pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.pagination-pages {
+  font-size: 0.85rem;
+  color: var(--text-2);
+}
+
+.pagination-pages strong {
+  color: var(--primary);
+}
+
+.pagination-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: white;
+  color: var(--text-1);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: var(--bg-1);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-2);
+}
+
 /* ── Summary bar ──────────────────────────────────────── */
 .summary-bar {
   display: flex;

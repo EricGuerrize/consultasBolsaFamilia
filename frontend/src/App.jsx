@@ -883,9 +883,9 @@ export default function App() {
                                {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
                                {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
                              </td>
-                                                           <td className="td-mono">
-                                <div>{row.cpf || g.cpf}</div>
-                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula || g.matricula || '—'}</div>
+                              <td className="td-mono">
+                                <div>{row.cpf}</div>
+                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula || '—'}</div>
                               </td>
 
                              <td>
@@ -938,7 +938,10 @@ export default function App() {
                                   {g.servidor}
                                   {g.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
                                 </td>
-                                <td className="td-mono">{g.cpf}</td>
+                                 <td className="td-mono">
+                                   <div>{g.cpf}</div>
+                                   <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {g.matricula || '—'}</div>
+                                 </td>
                                 <td>
                                   <div style={{ fontSize: '0.7rem', fontWeight: 600 }}>{g.ocorrencias[0].cargo || '—'}</div>
                                   <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>{g.ocorrencias[0].orgao || '—'}</div>
@@ -997,13 +1000,42 @@ export default function App() {
                   <span>{uniqueServers} servidor{uniqueServers !== 1 ? 'es' : ''} único{uniqueServers !== 1 ? 's' : ''} · {allResults.length} ocorrência{allResults.length !== 1 ? 's' : ''}</span>
                   <span>Total: <strong>R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
                 </div>
-                {totalPaginas > 1 && (
-                  <div className="pagination">
-                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)}>Anterior</button>
-                    <span className="page-info">Página {paginaAtual} de {totalPaginas}</span>
-                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)}>Próxima</button>
+                <div className="pagination">
+                  <div className="pagination-controls">
+                    <span>Exibir:</span>
+                    <select 
+                      className="pagination-select"
+                      value={itensPorPagina} 
+                      onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
+                    >
+                      <option value={25}>25 por página</option>
+                      <option value={50}>50 por página</option>
+                      <option value={100}>100 por página</option>
+                    </select>
                   </div>
-                )}
+                  
+                  <div className="pagination-nav">
+                    <button 
+                      className="pagination-btn"
+                      disabled={paginaAtual === 1} 
+                      onClick={() => { setPaginaAtual(p => p - 1); window.scrollTo(0,0); }}
+                    >
+                      Anterior
+                    </button>
+                    
+                    <span className="pagination-pages">
+                      Página <strong>{paginaAtual}</strong> de {Math.ceil((agrupado ? groupedResults.length : filteredResults.length) / itensPorPagina)}
+                    </span>
+
+                    <button 
+                      className="pagination-btn"
+                      disabled={paginaAtual >= Math.ceil((agrupado ? groupedResults.length : filteredResults.length) / itensPorPagina)} 
+                      onClick={() => { setPaginaAtual(p => p + 1); window.scrollTo(0,0); }}
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
 
                 <div className="info-box-modern">
                   <h2 className="info-main-title">Como funciona este monitor de auditoria</h2>

@@ -486,10 +486,10 @@ export default function App() {
   const Topbar = () => (
     <div className="topbar">
       <div className="topbar-brand">
-        <ShieldCheck size={20} color="var(--cyan)" />
+        <ShieldCheck size={20} color="var(--blue)" />
         Auditoria Bolsa Família
-        <span>/</span>
-        <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>Control Panel</span>
+        <span>|</span>
+        <span style={{ opacity: 0.6, fontSize: '0.8rem' }}>Portal da Transparência</span>
       </div>
       <div className="topbar-right">
         {fase !== 'config' && (
@@ -514,7 +514,7 @@ export default function App() {
           <div className="config-panel">
             <div className="config-panel-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={16} color="var(--cyan)" />
+                <Settings size={16} color="var(--blue)" />
                 Configurar Auditoria
               </div>
             </div>

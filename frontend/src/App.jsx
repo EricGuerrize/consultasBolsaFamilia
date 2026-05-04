@@ -960,24 +960,88 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="info-box methodology">
-                  <h3><ShieldCheck size={18} /> Metodologia do Cruzamento</h3>
-                  <div className="info-grid">
-                    <div className="info-item">
-                      <strong>1. Extração de Dados</strong>
-                      <p>Os dados dos servidores são extraídos em tempo real do banco Oracle municipal. Os dados de benefícios são obtidos via API oficial do Portal da Transparência do Governo Federal.</p>
+                <div className="info-box-modern">
+                  <h2 className="info-main-title">Como funciona este monitor de auditoria</h2>
+                  
+                  <div className="info-grid-modern">
+                    {/* Coluna 1: Abas e Filtros */}
+                    <div className="info-col">
+                      <div className="info-section-header">
+                        <Layout size={18} />
+                        <h3>O que significa cada filtro</h3>
+                      </div>
+                      <div className="info-list">
+                        <div className="info-list-item">
+                          <span className="dot-indicator blue"></span>
+                          <div>
+                            <strong>Ver todos</strong>
+                            <p>Exibe todos os servidores que possuem registros de recebimento no Bolsa Família no período selecionado.</p>
+                          </div>
+                        </div>
+                        <div className="info-list-item">
+                          <span className="dot-indicator red"></span>
+                          <div>
+                            <strong>Apenas Irregulares</strong>
+                            <p>Filtra apenas casos onde o saque do benefício ocorreu <strong>após ou no mesmo mês</strong> da admissão no cargo público.</p>
+                          </div>
+                        </div>
+                        <div className="info-list-item">
+                          <span className="dot-indicator ghost"></span>
+                          <div>
+                            <strong>Mostrar tudo (API)</strong>
+                            <p>Exibe inclusive registros da API federal que não deram "match" direto com o seu banco de dados.</p>
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                    <div className="info-item">
-                      <strong>2. Pareamento (Matching)</strong>
-                      <p>O cruzamento utiliza uma técnica de normalização de nomes e validação parcial de CPF (mascarado) para garantir que o beneficiário na API federal seja a mesma pessoa registrada na prefeitura.</p>
-                    </div>
-                    <div className="info-item">
-                      <strong>3. Regra de Irregularidade</strong>
-                      <p>Um caso é sinalizado como irregular se a data de admissão do servidor no cargo público for anterior ou igual ao mês de competência em que o benefício foi pago.</p>
+
+                    {/* Coluna 2: Lógica de Cruzamento */}
+                    <div className="info-col">
+                      <div className="info-section-header">
+                        <Zap size={18} />
+                        <h3>Como o cruzamento é feito</h3>
+                      </div>
+                      <p className="info-text">O sistema realiza o cruzamento em 3 etapas para garantir a precisão:</p>
+                      <ol className="info-steps">
+                        <li><strong>Identificação:</strong> Localiza o servidor no Oracle e extrai a data do primeiro ato de admissão (Ato 1 ou 2).</li>
+                        <li><strong>Pareamento:</strong> Compara o nome normalizado e o CPF mascarado com a base do Portal da Transparência.</li>
+                        <li><strong>Validação Temporal:</strong> Verifica se a competência do benefício coincide com o período em que o servidor já era ativo.</li>
+                      </ol>
                     </div>
                   </div>
-                  <div className="info-footer">
-                    * Esta ferramenta é um auxílio à auditoria. Os resultados devem ser validados individualmente antes de qualquer medida administrativa.
+
+                  <div className="info-grid-modern" style={{ marginTop: '2rem' }}>
+                    {/* Coluna 3: Sistemas */}
+                    <div className="info-col">
+                      <div className="info-section-header">
+                        <Database size={18} />
+                        <h3>Os sistemas monitorados</h3>
+                      </div>
+                      <ul className="info-bullets">
+                        <li><strong>Oracle Municipal:</strong> Fonte dos dados de pessoal, cargos e datas de ingresso (Ato Pessoal).</li>
+                        <li><strong>Portal da Transparência:</strong> Dados oficiais do Governo Federal sobre pagamentos do Novo Bolsa Família.</li>
+                      </ul>
+                      <div className="info-note">
+                        * O sistema busca dados via API oficial do Governo Federal em tempo real.
+                      </div>
+                    </div>
+
+                    {/* Coluna 4: Interpretando Números */}
+                    <div className="info-col">
+                      <div className="info-section-header">
+                        <BarChart3 size={18} />
+                        <h3>Como interpretar os números</h3>
+                      </div>
+                      <p className="info-text">Os indicadores no topo ajudam a medir o impacto financeiro:</p>
+                      <div className="info-card-explain">
+                        <strong>Irregularidades:</strong> Número de servidores distintos com pelo menos um saque indevido.<br/>
+                        <strong>Valor em Risco:</strong> Soma total dos valores sacados em períodos onde o servidor já estava admitido.
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="info-footer-modern">
+                    Este monitor é uma ferramenta de apoio à fiscalização. Todo alerta de irregularidade deve ser submetido a processo administrativo para ampla defesa e contraditório antes de conclusões definitivas.
                   </div>
                 </div>
               </>

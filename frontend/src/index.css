@@ -801,3 +801,125 @@ tbody tr:hover td { background: var(--blue-faint); }
   .topbar { padding: 0 1rem; }
   .page { padding: 0 1rem 3rem; }
 }
+/* ── Info Box Modern ─────────────────────────────────── */
+.info-box-modern {
+  margin-top: 3rem;
+  padding: 2.5rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+}
+
+.info-main-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 2rem;
+}
+
+.info-grid-modern {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3rem;
+}
+
+.info-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 1.25rem;
+  color: #334155;
+}
+
+.info-section-header h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.info-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.info-list-item {
+  display: flex;
+  gap: 12px;
+}
+
+.dot-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-top: 6px;
+  flex-shrink: 0;
+}
+
+.dot-indicator.blue { background: #2563eb; }
+.dot-indicator.red { background: #ef4444; }
+.dot-indicator.ghost { background: #94a3b8; }
+
+.info-list-item strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #1e293b;
+  margin-bottom: 2px;
+}
+
+.info-list-item p {
+  font-size: 0.78rem;
+  color: #64748b;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.info-text {
+  font-size: 0.82rem;
+  color: #475569;
+  margin-bottom: 1rem;
+}
+
+.info-steps {
+  padding-left: 1.25rem;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.info-steps li { margin-bottom: 0.75rem; line-height: 1.5; }
+.info-steps li strong { color: #1e293b; }
+
+.info-bullets {
+  padding-left: 1.25rem;
+  font-size: 0.82rem;
+  color: #475569;
+}
+
+.info-bullets li { margin-bottom: 0.5rem; }
+
+.info-note {
+  font-size: 0.7rem;
+  font-style: italic;
+  color: #94a3b8;
+  margin-top: 1rem;
+}
+
+.info-card-explain {
+  background: #f8fafc;
+  padding: 1rem;
+  border-radius: 8px;
+  font-size: 0.78rem;
+  color: #475569;
+  line-height: 1.8;
+  border-left: 3px solid #e2e8f0;
+}
+
+.info-footer-modern {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.72rem;
+  color: #94a3b8;
+  text-align: center;
+}

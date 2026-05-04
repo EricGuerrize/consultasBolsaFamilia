@@ -45,26 +45,29 @@ class OracleConnector:
         SELECT /*+ FIRST_ROWS(500) */
             pess.pess_nome AS nome,
             pess.pess_cpf AS cpf,
-            pfs.pess_matricula AS matricula,
+            p.pess_matricula AS matricula,
             TO_CHAR(ap.atop_datadocumento, 'DD/MM/YYYY') AS admissao,
             tap.tatop_descricao AS tipo_ato,
-            TRANSLATE(cf.cfpess_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS cargo,
-            pfs.exercicio AS exercicio_folha,
+            TRANSLATE(cfug.cfpessug_descricao, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS cargo,
+            p.exercicio AS exercicio_folha,
             '01' AS mes_referencia
-        FROM aplic2008.pessoal_folha_servidor@conectprod pfs
+        FROM (
+            SELECT ent_codigo, exercicio, pess_matricula, MAX(cfpessug_codigo) as cfpessug_codigo
+            FROM aplic2008.pessoal_folha_pagamento@conectprod
+            WHERE ent_codigo = '{ent_codigo}' AND exercicio = '{exercicio}'
+            GROUP BY ent_codigo, exercicio, pess_matricula
+        ) p
         INNER JOIN aplic2008.pessoal@conectprod pess 
-            ON pfs.ent_codigo = pess.ent_codigo AND pfs.pess_matricula = pess.pess_matricula
-        LEFT JOIN aplic2008.cargo_funcao_pessoal@conectprod cf 
-            ON pfs.cfpess_codigo = cf.cfpess_codigo
+            ON p.ent_codigo = pess.ent_codigo AND p.pess_matricula = pess.pess_matricula
+        LEFT JOIN aplic2008.cargo_funcao_pessoal_ug@conectprod cfug
+            ON p.cfpessug_codigo = cfug.cfpessug_codigo
         INNER JOIN (
             SELECT ent_codigo, pess_matricula, MIN(atop_datadocumento) as atop_datadocumento, MIN(tatop_codigo) as tatop_codigo
             FROM aplic2008.ato_pessoal@conectprod
             WHERE tatop_codigo IN (1, 2)
             GROUP BY ent_codigo, pess_matricula
-        ) ap ON pfs.ent_codigo = ap.ent_codigo AND pfs.pess_matricula = ap.pess_matricula
+        ) ap ON p.ent_codigo = ap.ent_codigo AND p.pess_matricula = ap.pess_matricula
         INNER JOIN aplic2008.tipo_ato_pessoal@conectprod tap ON ap.tatop_codigo = tap.tatop_codigo
-        WHERE pfs.ent_codigo = '{ent_codigo}' 
-          AND pfs.exercicio = '{exercicio}'
         """
 
         import time

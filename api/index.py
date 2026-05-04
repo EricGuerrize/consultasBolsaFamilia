@@ -68,13 +68,13 @@ async def get_servidores(request: Request):
         df = oracle.get_servidores_data(ent_codigo=ent_codigo, exercicio=exercicio)
         df.columns = [c.lower() for c in df.columns]
 
-        # Normaliza CPF e remove duplicatas
+        # Normaliza CPF
         df["cpf"] = df["cpf"].apply(_normalizar_cpf)
-        df = df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
+        df = df[df["cpf"] != ""]
 
         df = df.fillna("")
         servidores = (
-            df[["cpf", "nome", "matricula", "admissao", "tipo_ato"]]
+            df[["cpf", "nome", "matricula", "admissao", "tipo_ato", "mes_referencia"]]
             .to_dict(orient="records")
         )
         return {"servidores": servidores, "total": len(servidores)}

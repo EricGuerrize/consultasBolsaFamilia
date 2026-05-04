@@ -42,29 +42,29 @@ class OracleConnector:
             raise ValueError("Credenciais do Oracle não encontradas no arquivo .env")
 
         query = f"""
-        SELECT /*+ FIRST_ROWS(500) */
-            pess.pess_nome AS nome,
-            pess.pess_cpf AS cpf,
+        SELECT /*+ FIRST_ROWS(1000) */
+            p.pess_nome AS nome,
+            p.pess_cpf AS cpf,
             p.pess_matricula AS matricula,
             TO_CHAR(ap.atop_datadocumento, 'DD/MM/YYYY') AS admissao,
             tap.tatop_descricao AS tipo_ato,
-            p.exercicio AS exercicio_folha,
-            '01' AS mes_referencia
-        FROM (
-            SELECT ent_codigo, exercicio, pess_matricula
-            FROM aplic2008.pessoal_folha_pagamento@conectprod
-            WHERE ent_codigo = '{ent_codigo}' AND exercicio = '{exercicio}'
-            GROUP BY ent_codigo, exercicio, pess_matricula
-        ) p
-        INNER JOIN aplic2008.pessoal@conectprod pess 
-            ON p.ent_codigo = pess.ent_codigo AND p.pess_matricula = pess.pess_matricula
+            pfg.exercicio AS exercicio_folha,
+            pfg.fpgto_mesreferencia AS mes_referencia
+        FROM aplic2008.pessoal@conectprod p
         INNER JOIN (
             SELECT ent_codigo, pess_matricula, MIN(atop_datadocumento) as atop_datadocumento, MIN(tatop_codigo) as tatop_codigo
             FROM aplic2008.ato_pessoal@conectprod
             WHERE tatop_codigo IN (1, 2)
             GROUP BY ent_codigo, pess_matricula
         ) ap ON p.ent_codigo = ap.ent_codigo AND p.pess_matricula = ap.pess_matricula
-        INNER JOIN aplic2008.tipo_ato_pessoal@conectprod tap ON ap.tatop_codigo = tap.tatop_codigo
+        INNER JOIN aplic2008.tipo_ato_pessoal@conectprod tap 
+            ON ap.tatop_codigo = tap.tatop_codigo
+        INNER JOIN aplic2008.pessoal_folha_pagamento@conectprod pfg
+            ON pfg.ent_codigo = p.ent_codigo
+            AND pfg.pess_matricula = p.pess_matricula
+        WHERE p.ent_codigo = '{ent_codigo}' 
+          AND p.exercicio = '{exercicio}'
+          AND pfg.exercicio = '{exercicio}'
         """
 
         import time

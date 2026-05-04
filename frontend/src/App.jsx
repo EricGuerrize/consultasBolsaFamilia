@@ -895,8 +895,8 @@ export default function App() {
                                 <td className="td-dim">
                                   {row.isIrregular ? (
                                     <>
-                                      <div style={{ color: 'var(--red)', fontWeight: 600 }}>Ref. {fmtMes(row.mes)} após admissão</div>
-                                      <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>Ato: {row.tipo_ato || 'Nomeação/Posse'} ({row.admissao})</div>
+                                      <div style={{ color: 'var(--red)', fontWeight: 700 }}>CONFIRMADO POR FOLHA</div>
+                                      <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>Ref. {fmtMes(row.mes)} · Ativo via {row.tipo_ato || 'Cadastro'}</div>
                                     </>
                                   ) : '—'}
                                 </td>

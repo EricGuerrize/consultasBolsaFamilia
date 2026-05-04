@@ -848,7 +848,7 @@ export default function App() {
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
                         <th>Servidor</th><th>CPF</th><th>Cargo / Admissão</th><th>Beneficiário (API)</th>
-                        <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
+                        <th>Município / UF</th><th>Mês Ref.</th>{exibirIrregulares && <th>Justificativa</th>}<th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
                       <tbody>
@@ -869,7 +869,11 @@ export default function App() {
                              <td>{row.beneficiario}</td>
                              <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
                              <td className="td-dim">{fmtMes(row.mes)}</td>
-                             <td className="td-dim">{row.data_saque || '—'}</td>
+                             {exibirIrregulares && (
+                                <td style={{ fontSize: '0.72rem', color: 'var(--red)', fontWeight: 500 }}>
+                                  {row.isIrregular ? `Ref. ${fmtMes(row.mes)} após admissão (${row.admissao})` : '—'}
+                                </td>
+                              )}
                              <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                              {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
                            </tr>
@@ -884,7 +888,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>Cargo / Órgão</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                        <th>Servidor</th><th>CPF</th><th>Cargo / Órgão</th><th>Ocorrências</th><th>Meses</th>{exibirIrregulares && <th>Justificativa</th>}<th>Valor Total</th>
                       </tr></thead>
                       <tbody>
                         {paginatedResults.map(g => {
@@ -910,6 +914,11 @@ export default function App() {
                                 </td>
                                 <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
                                 <td className="td-dim">{mesesG.join(' · ')}</td>
+                                {exibirIrregulares && (
+                                  <td style={{ fontSize: '0.72rem', color: 'var(--red)', fontWeight: 500 }}>
+                                    Conflito: Admissão em {g.ocorrencias[0].admissao}
+                                  </td>
+                                )}
                                 <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                               </tr>
                               {expanded && g.ocorrencias.map((o, i) => {
@@ -929,7 +938,12 @@ export default function App() {
                                       {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
                                       {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
                                     </td>
-                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
+                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)}</td>
+                                    {exibirIrregulares && (
+                                      <td style={{ fontSize: '0.72rem', color: 'var(--red)' }}>
+                                        Competência {fmtMes(o.mes)} pós-admissão
+                                      </td>
+                                    )}
                                     <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                   </tr>
                                 );

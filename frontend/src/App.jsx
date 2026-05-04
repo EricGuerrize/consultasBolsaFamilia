@@ -47,6 +47,7 @@ export default function App() {
   const [fase, setFase] = useState('config');
   const [agrupado, setAgrupado] = useState(false);
   const [exibirTudo, setExibirTudo] = useState(false);
+  const [exibirIrregulares, setExibirIrregulares] = useState(false);
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [apenasMultiplos, setApenasMultiplos] = useState(false);
   const [searchLogs, setSearchLogs] = useState([]);
@@ -404,14 +405,18 @@ export default function App() {
   const allResults = status?.result || [];
   const filteredResults = useMemo(() => {
     let filtered = allResults;
-    if (!exibirTudo) filtered = filtered.filter(r => r.isMatch);
+    if (exibirIrregulares) filtered = filtered.filter(r => r.isIrregular);
+    else if (!exibirTudo) filtered = filtered.filter(r => r.isMatch);
+    
     if (!searchFilter) return filtered;
     const q = searchFilter.toLowerCase();
     return filtered.filter(r => r.servidor?.toLowerCase().includes(q) || r.cpf?.includes(q) || r.municipio?.toLowerCase().includes(q) || r.beneficiario?.toLowerCase().includes(q));
-  }, [allResults, searchFilter, exibirTudo]);
+  }, [allResults, searchFilter, exibirTudo, exibirIrregulares]);
 
   const totalValue   = useMemo(() => allResults.filter(r => r.isMatch).reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
   const uniqueServers = useMemo(() => new Set(allResults.filter(r => r.isMatch).map(r => `${r.cpf}|${r.servidor}`)).size, [allResults]);
+  const irrCount = useMemo(() => allResults.filter(r => r.isIrregular).length, [allResults]);
+  const irrValue = useMemo(() => allResults.filter(r => r.isIrregular).reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
   const topMes = useMemo(() => {
     const counts = {}; for (const r of allResults) counts[r.mes] = (counts[r.mes] || 0) + 1;
     const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
@@ -428,6 +433,7 @@ export default function App() {
       if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);
       g.totalValor += r.valor || 0;
+      if (r.isIrregular) g.isIrregular = true;
     }
     const all = [...map.values()]
       .map(g => ({ ...g, nisCount: g.nisSet.size }))
@@ -439,9 +445,9 @@ export default function App() {
 
   const exportCSV = () => {
     if (!allResults.length) return;
-    const hdrs = ['Servidor', 'CPF', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Página'];
+    const hdrs = ['Servidor', 'CPF', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Irregularidade', 'Página'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csv = '﻿' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.pagina ?? ''].map(esc).join(','))].join('\n');
+    const csv = '﻿' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.isIrregular ? 'SIM' : 'NÃO', r.pagina ?? ''].map(esc).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     Object.assign(document.createElement('a'), { href: url, download: 'resultados_bolsafamilia.csv' }).click();
     URL.revokeObjectURL(url);
@@ -730,16 +736,16 @@ export default function App() {
             <div className="stat-sub">registros de saque</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Mês com mais registros</div>
-            <div className="stat-value muted">{topMes || (isProcessing ? '…' : '—')}</div>
-            <div className="stat-sub">pico de ocorrências</div>
+            <div className="stat-label">Irregularidades</div>
+            <div className={`stat-value ${irrCount > 0 ? 'danger' : 'muted'}`}>{irrCount || '—'}</div>
+            <div className="stat-sub">casos detectados</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Valor total em saques</div>
-            <div className={`stat-value muted${totalValue > 0 ? ' danger' : ''}`} style={{ fontSize: '1.25rem' }}>
-              {totalValue > 0 ? `R$ ${totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+            <div className="stat-label">Valor em Risco</div>
+            <div className={`stat-value ${irrValue > 0 ? 'danger' : 'muted'}`} style={{ fontSize: '1.25rem' }}>
+              {irrValue > 0 ? `R$ ${irrValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
             </div>
-            <div className="stat-sub">soma do período</div>
+            <div className="stat-sub">total irregular</div>
           </div>
         </div>
 
@@ -766,8 +772,12 @@ export default function App() {
                   onClick={() => { setAgrupado(a => !a); setExpandedRows(new Set()); }}>
                   <Users size={12} /> {agrupado ? 'Ver todos' : 'Agrupar por servidor'}
                 </button>
+                <button className={`btn btn-sm ${exibirIrregulares ? 'btn-active-red' : 'btn-ghost'}`}
+                  onClick={() => { setExibirIrregulares(v => !v); if (!exibirIrregulares) setExibirTudo(true); }}>
+                  <AlertCircle size={12} /> {exibirIrregulares ? 'Ver todos' : 'Apenas Irregulares'}
+                </button>
                 <button className={`btn btn-sm ${exibirTudo ? 'btn-active' : 'btn-ghost'}`}
-                  onClick={() => setExibirTudo(a => !a)}>
+                  onClick={() => { setExibirTudo(a => !a); if (exibirIrregulares) setExibirIrregulares(false); }}>
                   <Search size={12} /> {exibirTudo ? 'Ocultar sem match' : 'Mostrar tudo (API)'}
                 </button>
                 {agrupado && (
@@ -878,6 +888,7 @@ export default function App() {
                                 <td className="td-bold">
                                   {alerta && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ {g.ocorrencias.length}×</span>}
                                   {g.servidor}
+                                  {g.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
                                 </td>
                                 <td className="td-mono">{g.cpf}</td>
                                 <td>

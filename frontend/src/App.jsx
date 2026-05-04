@@ -637,6 +637,25 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="field">
+                <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
+                  <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                  <Settings size={11} /> Conexão com a API (ngrok)
+                </button>
+                {showAdvanced && (
+                  <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>URL da API Local ou Remota</label>
+                      <input type="text" placeholder="Ex: https://xyz.ngrok.app ou http://localhost:8000" value={baseUrl}
+                        onChange={e => setBaseUrl(e.target.value)} />
+                      <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: '6px' }}>
+                        Deixe em branco para usar o padrão (localhost:8000). Use para acessar de outras máquinas.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {/* ── Seletor município ── */}
               {config.modo === 'municipio' && (
                 <div className="field" ref={municipioRef}>

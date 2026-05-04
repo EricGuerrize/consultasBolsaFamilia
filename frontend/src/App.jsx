@@ -3,7 +3,7 @@ import {
   Upload, Search, Download, AlertCircle, CheckCircle2,
   ShieldCheck, Loader2, Filter, FileText,
   ChevronDown, ChevronRight, RotateCcw, Users, X, Settings,
-  Database,
+  Database, Layout, Zap, BarChart3
 } from 'lucide-react';
 
 const PARALLEL_WORKERS = 1;

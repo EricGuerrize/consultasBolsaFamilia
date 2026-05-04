@@ -42,41 +42,24 @@ class OracleConnector:
             raise ValueError("Credenciais do Oracle não encontradas no arquivo .env")
 
         query = f"""
-        SELECT /*+ FIRST_ROWS(100) */
-               p.pess_matricula,
-               e.pess_cpf,
-               TRANSLATE(e.pess_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS pess_nome,
-               TRANSLATE(COALESCE(cfug.cfpessug_descricao, cn.cnat_descricao), 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS cargo,
-               TO_CHAR(ap.atop_datadocumento, 'DD/MM/YYYY') AS pess_data_admissao,
-               ap.tatop_descricao AS tipo_ato,
-               p.fpgto_mesreferencia,
-               p.fpgto_anoreferencia
-        FROM (
-            SELECT DISTINCT ent_codigo, exercicio, pess_matricula, fpgto_mesreferencia, fpgto_anoreferencia, cfpessug_codigo
-            FROM aplic2008.pessoal_folha_pagamento@conectprod
-            WHERE ent_codigo = '{ent_codigo}' AND exercicio = '{exercicio}'
-        ) p
-        INNER JOIN aplic2008.pessoal@conectprod e
-            ON p.pess_matricula = e.pess_matricula
-           AND p.ent_codigo = e.ent_codigo
-        LEFT JOIN aplic2008.cargo_funcao_pessoal_ug@conectprod cfug
-            ON p.cfpessug_codigo = cfug.cfpessug_codigo
-        LEFT JOIN aplic2008.cargo_natureza@conectprod cn
-            ON cfug.cfpessug_naturezacargo = cn.cnat_codigo
-        LEFT JOIN (
-            SELECT t.ent_codigo, t.pess_matricula, t.atop_datadocumento, tap.tatop_descricao
-            FROM (
-                SELECT ent_codigo, pess_matricula, atop_datadocumento, tatop_codigo,
-                       ROW_NUMBER() OVER (PARTITION BY ent_codigo, pess_matricula ORDER BY atop_datadocumento ASC) as rn
-                FROM aplic2008.ato_pessoal@conectprod
-                WHERE tatop_codigo IN (1, 2)
-            ) t
-            INNER JOIN aplic2008.tipo_ato_pessoal@conectprod tap ON t.tatop_codigo = tap.tatop_codigo
-            WHERE t.rn = 1
-        ) ap
-            ON p.ent_codigo = ap.ent_codigo
-           AND p.pess_matricula = ap.pess_matricula
-        ORDER BY p.fpgto_anoreferencia, p.fpgto_mesreferencia
+        SELECT /*+ FIRST_ROWS(500) */
+            p.pess_nome AS nome,
+            p.pess_cpf AS cpf,
+            p.pess_matricula AS matricula,
+            TO_CHAR(ap.atop_datadocumento, 'DD/MM/YYYY') AS admissao,
+            tap.tatop_descricao AS tipo_ato,
+            p.exercicio AS exercicio_folha,
+            '01' AS mes_referencia
+        FROM aplic2008.pessoal@conectprod p
+        INNER JOIN (
+            SELECT ent_codigo, pess_matricula, MIN(atop_datadocumento) as atop_datadocumento, MIN(tatop_codigo) as tatop_codigo
+            FROM aplic2008.ato_pessoal@conectprod
+            WHERE tatop_codigo IN (1, 2)
+            GROUP BY ent_codigo, pess_matricula
+        ) ap ON p.ent_codigo = ap.ent_codigo AND p.pess_matricula = ap.pess_matricula
+        INNER JOIN aplic2008.tipo_ato_pessoal@conectprod tap ON ap.tatop_codigo = tap.tatop_codigo
+        WHERE p.ent_codigo = '{ent_codigo}' 
+          AND p.exercicio = '{exercicio}'
         """
 
         import time

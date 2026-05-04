@@ -69,13 +69,12 @@ async def get_servidores(request: Request):
         df.columns = [c.lower() for c in df.columns]
 
         # Normaliza CPF e remove duplicatas
-        df["pess_cpf"] = df["pess_cpf"].apply(_normalizar_cpf)
-        df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
+        df["cpf"] = df["cpf"].apply(_normalizar_cpf)
+        df = df[df["cpf"] != ""].drop_duplicates(subset=["cpf"])
 
         df = df.fillna("")
         servidores = (
-            df[["pess_cpf", "pess_nome", "cfpess_nome", "pess_data_admissao"]]
-            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome", "cfpess_nome": "cargo", "pess_data_admissao": "admissao"})
+            df[["cpf", "nome", "matricula", "admissao", "tipo_ato"]]
             .to_dict(orient="records")
         )
         return {"servidores": servidores, "total": len(servidores)}

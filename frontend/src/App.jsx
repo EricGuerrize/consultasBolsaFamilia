@@ -48,6 +48,8 @@ export default function App() {
   const [agrupado, setAgrupado] = useState(false);
   const [exibirTudo, setExibirTudo] = useState(false);
   const [exibirIrregulares, setExibirIrregulares] = useState(false);
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const itensPorPagina = 50;
   const [expandedRows, setExpandedRows] = useState(new Set());
   const [apenasMultiplos, setApenasMultiplos] = useState(false);
   const [searchLogs, setSearchLogs] = useState([]);
@@ -283,7 +285,7 @@ export default function App() {
     setLoading(true); setError(null);
     setStatus({ status: 'processing', progress: 0, result: [], message: 'Iniciando...' });
     setSearchLogs(['Iniciando consulta...']);
-    setFase('processing'); setSearchFilter(''); setAgrupado(false); setExibirTudo(false); setExpandedRows(new Set());
+    setFase('processing'); setSearchFilter(''); setAgrupado(false); setExibirTudo(false); setExibirIrregulares(false); setPaginaAtual(1); setExpandedRows(new Set());
     cancelRef.current = false;
 
     try {
@@ -440,6 +442,17 @@ export default function App() {
       .sort((a, b) => b.ocorrencias.length - a.ocorrencias.length || b.totalValor - a.totalValor);
     return apenasMultiplos ? all.filter(g => g.ocorrencias.length > 5) : all;
   }, [filteredResults, apenasMultiplos]);
+
+  const paginatedResults = useMemo(() => {
+    const target = agrupado ? groupedResults : filteredResults;
+    const start = (paginaAtual - 1) * itensPorPagina;
+    return target.slice(start, start + itensPorPagina);
+  }, [agrupado, groupedResults, filteredResults, paginaAtual]);
+
+  const totalPaginas = useMemo(() => {
+    const target = agrupado ? groupedResults : filteredResults;
+    return Math.ceil(target.length / itensPorPagina);
+  }, [agrupado, groupedResults, filteredResults]);
 
   const toggleRow = gKey => setExpandedRows(prev => { const next = new Set(prev); next.has(gKey) ? next.delete(gKey) : next.add(gKey); return next; });
 
@@ -839,9 +852,9 @@ export default function App() {
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
                       <tbody>
-                        {filteredResults.map((row, i) => (
+                        {paginatedResults.map((row, i) => (
                           <tr key={i} className={!row.isMatch ? 'row-dim' : ''}>
-                             <td className="td-num">{i + 1}</td>
+                             <td className="td-num">{(paginaAtual - 1) * itensPorPagina + i + 1}</td>
                              <td className="td-bold">
                                {row.servidor}
                                {!row.isMatch && <span className="label-tag api" style={{ marginLeft: 8 }}>API</span>}
@@ -874,7 +887,7 @@ export default function App() {
                         <th>Servidor</th><th>CPF</th><th>Cargo / Órgão</th><th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
                       </tr></thead>
                       <tbody>
-                        {groupedResults.map(g => {
+                        {paginatedResults.map(g => {
                           const gKey = `${g.cpf}|${g.servidor}`;
                           const expanded = expandedRows.has(gKey);
                           const mesesG = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
@@ -938,6 +951,34 @@ export default function App() {
                 <div className="summary-bar">
                   <span>{uniqueServers} servidor{uniqueServers !== 1 ? 'es' : ''} único{uniqueServers !== 1 ? 's' : ''} · {allResults.length} ocorrência{allResults.length !== 1 ? 's' : ''}</span>
                   <span>Total: <strong>R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
+                </div>
+                {totalPaginas > 1 && (
+                  <div className="pagination">
+                    <button disabled={paginaAtual === 1} onClick={() => setPaginaAtual(p => p - 1)}>Anterior</button>
+                    <span className="page-info">Página {paginaAtual} de {totalPaginas}</span>
+                    <button disabled={paginaAtual === totalPaginas} onClick={() => setPaginaAtual(p => p + 1)}>Próxima</button>
+                  </div>
+                )}
+
+                <div className="info-box methodology">
+                  <h3><ShieldCheck size={18} /> Metodologia do Cruzamento</h3>
+                  <div className="info-grid">
+                    <div className="info-item">
+                      <strong>1. Extração de Dados</strong>
+                      <p>Os dados dos servidores são extraídos em tempo real do banco Oracle municipal. Os dados de benefícios são obtidos via API oficial do Portal da Transparência do Governo Federal.</p>
+                    </div>
+                    <div className="info-item">
+                      <strong>2. Pareamento (Matching)</strong>
+                      <p>O cruzamento utiliza uma técnica de normalização de nomes e validação parcial de CPF (mascarado) para garantir que o beneficiário na API federal seja a mesma pessoa registrada na prefeitura.</p>
+                    </div>
+                    <div className="info-item">
+                      <strong>3. Regra de Irregularidade</strong>
+                      <p>Um caso é sinalizado como irregular se a data de admissão do servidor no cargo público for anterior ou igual ao mês de competência em que o benefício foi pago.</p>
+                    </div>
+                  </div>
+                  <div className="info-footer">
+                    * Esta ferramenta é um auxílio à auditoria. Os resultados devem ser validados individualmente antes de qualquer medida administrativa.
+                  </div>
                 </div>
               </>
             )}

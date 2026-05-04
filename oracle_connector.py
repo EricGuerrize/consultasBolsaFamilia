@@ -99,7 +99,7 @@ class OracleConnector:
                    TRANSLATE(o.org_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS org_nome,
                    TRANSLATE(u.unor_nome, 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS unor_nome,
                    TRANSLATE(COALESCE(c.cfpess_nome, cfug.cfpessug_descricao, cn.cnat_descricao), 'ÁÉÍÓÚÀÈÌÒÙÂÊÎÔÛÃÕÄËÏÖÜÇáéíóúàèìòùâêîôûãõäëïöüç', 'AEIOUAEIOUAEIOUAOAEIOUCaeiouaeiouaeiouaoaeiouc') AS cfpess_nome,
-                   NULL AS pess_data_admissao,
+                   TO_CHAR(ap.atop_datadocumento, 'DD/MM/YYYY') AS pess_data_admissao,
                    NULL AS chfpess_tipocargofuncao,
                    cn.cnat_descricao AS natureza_cargo,
                    DECODE(p.fpgto_mesreferencia,
@@ -136,6 +136,14 @@ class OracleConnector:
                 ON r.cfpess_codigo = c.cfpess_codigo
             LEFT JOIN aplic2008.cargo_natureza@conectprod cn
                 ON cfug.cfpessug_naturezacargo = cn.cnat_codigo
+            LEFT JOIN (
+                SELECT ent_codigo, pess_matricula, MIN(atop_datadocumento) AS atop_datadocumento
+                FROM aplic2008.ato_pessoal@conectprod
+                WHERE tatop_codigo IN (1, 2)
+                GROUP BY ent_codigo, pess_matricula
+            ) ap
+                ON p.ent_codigo = ap.ent_codigo
+               AND p.pess_matricula = ap.pess_matricula
             WHERE p.ent_codigo = '{ent_codigo}'
               AND p.exercicio = '{exercicio}'
         ) sub

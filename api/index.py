@@ -73,8 +73,8 @@ async def get_servidores(request: Request):
         df = df[df["pess_cpf"] != ""].drop_duplicates(subset=["pess_cpf"])
 
         servidores = (
-            df[["pess_cpf", "pess_nome", "cfpess_nome"]]
-            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome", "cfpess_nome": "cargo"})
+            df[["pess_cpf", "pess_nome", "cfpess_nome", "pess_data_admissao"]]
+            .rename(columns={"pess_cpf": "cpf", "pess_nome": "nome", "cfpess_nome": "cargo", "pess_data_admissao": "admissao"})
             .to_dict(orient="records")
         )
         return {"servidores": servidores, "total": len(servidores)}

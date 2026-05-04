@@ -813,7 +813,7 @@ export default function App() {
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
-                        <th>Servidor</th><th>CPF</th><th>Cargo</th><th>Beneficiário (API)</th>
+                        <th>Servidor</th><th>CPF</th><th>Cargo / Admissão</th><th>Beneficiário (API)</th>
                         <th>Município / UF</th><th>Mês Ref.</th><th>Data Saque</th><th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
@@ -829,6 +829,7 @@ export default function App() {
                              <td className="td-mono">{row.cpf}</td>
                              <td>
                                <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{row.cargo || '—'}</div>
+                               <div style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Adm: {row.admissao || '—'}</div>
                              </td>
                              <td>{row.beneficiario}</td>
                              <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>

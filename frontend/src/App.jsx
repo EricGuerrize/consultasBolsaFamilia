@@ -3,18 +3,22 @@ import {
   Upload, Search, Download, AlertCircle, CheckCircle2,
   ShieldCheck, Loader2, Filter, FileText,
   ChevronDown, ChevronRight, RotateCcw, Users, X, Settings,
-  Database, Layout, Zap, BarChart3
+  Database, Layout, Zap, BarChart3, AlertTriangle,
 } from 'lucide-react';
 
 const PARALLEL_WORKERS = 1;
 
+// YYYYMM ↔ YYYY-MM
+const toMonthInput = m => m ? `${m.slice(0, 4)}-${m.slice(4)}` : '';
+const fromMonthInput = v => v ? v.replace('-', '') : '';
+
 export default function App() {
   // ── Fonte dos servidores ─────────────────────
-  const [fonteServidores, setFonteServidores] = useState('csv'); // 'oracle' | 'csv'
+  const [fonteServidores, setFonteServidores] = useState('csv');
   const [oracleConfig, setOracleConfig] = useState({ ent_codigo: '1118181', exercicio: '2024' });
-  const [oracleInfo, setOracleInfo] = useState(null); // { total } depois de carregar
+  const [oracleInfo, setOracleInfo] = useState(null);
 
-  // ── Arquivo CSV (fonte alternativa) ──────────
+  // ── Arquivo CSV ──────────────────────────────
   const [file, setFile] = useState(null);
   const [columns, setColumns] = useState([]);
   const [fileInfo, setFileInfo] = useState(null);
@@ -34,31 +38,25 @@ export default function App() {
 
   // ── Config consulta ──────────────────────────
   const [modoTeste, setModoTeste] = useState(true);
-  const [showBancoConfig, setShowBancoConfig] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showMapping, setShowMapping] = useState(false);
   const [config, setConfig] = useState({
     m_ini: '202401', m_fim: '202403',
-    modo: 'municipio', ibge: '', api_key: '', 
+    modo: 'municipio', ibge: '', api_key: '',
     col_cpf: '', col_nome: '', col_cargo: '', col_admissao: '',
   });
-  const [showMapping, setShowMapping] = useState(false);
+  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('api_url') || '');
 
   // ── Resultados ───────────────────────────────
   const [fase, setFase] = useState('config');
-  const [agrupado, setAgrupado] = useState(false);
-  const [exibirTudo, setExibirTudo] = useState(false);
-  const [exibirIrregulares, setExibirIrregulares] = useState(false);
-  const [paginaAtual, setPaginaAtual] = useState(1);
-  const itensPorPagina = 50;
+  // viewMode: 'todos' | 'irregulares' | 'agrupado'
+  const [viewMode, setViewMode] = useState('todos');
   const [expandedRows, setExpandedRows] = useState(new Set());
-  const [apenasMultiplos, setApenasMultiplos] = useState(false);
-  const [searchLogs, setSearchLogs] = useState([]);
-  const [baseUrl, setBaseUrl] = useState(localStorage.getItem('api_url') || '');
+  const [paginaAtual, setPaginaAtual] = useState(1);
+  const [itensPorPagina, setItensPorPagina] = useState(50);
   const cancelRef = useRef(false);
 
-  useEffect(() => {
-    localStorage.setItem('api_url', baseUrl);
-  }, [baseUrl]);
+  useEffect(() => { localStorage.setItem('api_url', baseUrl); }, [baseUrl]);
 
   // ── Health checks ────────────────────────────
   useEffect(() => {
@@ -86,14 +84,9 @@ export default function App() {
 
   // ── Utilitários ──────────────────────────────
   const normalizarCPF = cpf => { if (!cpf) return ''; const d = String(cpf).replace(/\D/g, ''); return d.length <= 11 ? d.padStart(11, '0').slice(0, 11) : d.slice(0, 11); };
-  const meioCPF = cpfRaw => { const raw = String(cpfRaw || ''); const full = raw.replace(/\D/g, ''); if (full.length === 11) return full.slice(3, 9); return raw.replace(/[xX*]/g, '').replace(/\D/g, '').slice(0, 6); };
   const normalizarNome = nome => {
     if (!nome) return '';
-    return String(nome)
-      .normalize('NFD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .trim();
+    return String(nome).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
   };
   const mascararCPF = cpfRaw => {
     const c = normalizarCPF(cpfRaw);
@@ -102,7 +95,7 @@ export default function App() {
   };
   const chaveJS = (cpfRaw, nome) => {
     const nomeNorm = normalizarNome(nome);
-    const cpfMasc = cpfRaw.includes('*') ? cpfRaw : mascararCPF(cpfRaw);
+    const cpfMasc = String(cpfRaw).includes('*') ? cpfRaw : mascararCPF(cpfRaw);
     return nomeNorm && cpfMasc ? `${nomeNorm}|${cpfMasc}` : '';
   };
   const fmtMes = m => m ? `${m.slice(4)}/${m.slice(0, 4)}` : '—';
@@ -177,43 +170,39 @@ export default function App() {
     const mun = reg.municipio || {};
     const uf = mun.uf || {};
 
-    // O Portal da Transparência às vezes inverte sigla (Mato Grosso) e nome (MT)
-    // Queremos sempre a sigla de 2 letras (MT).
-    let ufAbbr = "MT"; // Default para o contexto do usuário
-    const v1 = String(uf.sigla || '');
-    const v2 = String(uf.nome || '');
-
+    // Portal às vezes inverte sigla e nome (ex: "Mato Grosso" em sigla)
+    let ufAbbr = 'MT';
+    const v1 = String(uf.sigla || ''), v2 = String(uf.nome || '');
     if (v1.length === 2) ufAbbr = v1;
     else if (v2.length === 2) ufAbbr = v2;
-    else if (v1.toLowerCase().includes("mato grosso")) ufAbbr = "MT";
-    else if (v2.toLowerCase().includes("mato grosso")) ufAbbr = "MT";
-    else ufAbbr = v1.slice(0, 2).toUpperCase() || v2.slice(0, 2).toUpperCase() || "MT";
-    
+    else if (v1.toLowerCase().includes('mato grosso') || v2.toLowerCase().includes('mato grosso')) ufAbbr = 'MT';
+    else ufAbbr = v1.slice(0, 2).toUpperCase() || v2.slice(0, 2).toUpperCase() || 'MT';
+
+    const mesRef = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
+    const admissao = srv.admissao || srv['Admissão'] || '';
+    const isIrregular = (() => {
+      if (!admissao || admissao.length < 10) return false;
+      try {
+        const [d, m, y] = admissao.split('/');
+        return parseInt(`${y}${m}`) <= parseInt(mesRef);
+      } catch { return false; }
+    })();
+
     return {
-      servidor: srv.nome || srv['Nome Servidor'] || '', 
-      cpf: srv.cpf || srv['CPF'] || '', 
+      servidor: srv.nome || srv['Nome Servidor'] || '',
+      cpf: srv.cpf || srv['CPF'] || '',
       beneficiario: bf.nome || '',
       cargo: srv.cargo || srv['Cargo'] || '',
-      admissao: srv.admissao || srv['Admissão'] || '',
+      admissao,
       orgao: srv.orgao || srv['Órgão'] || '',
       nis: bf.nis || bf.ns || bf.numeroInscricaoSocial || '',
       municipio: mun.nomeIBGE || '', uf: ufAbbr,
-      mes: (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6),
+      mes: mesRef,
       data_saque: reg.dataSaque || '', valor: reg.valorSaque ?? reg.valor ?? 0,
       tipo_ato: srv.tipo_ato || '',
       matricula: srv.pess_matricula || '',
       pagina,
-      isIrregular: (() => {
-        const adm = srv.admissao || srv['Admissão'] || '';
-        if (!adm || adm.length < 10) return false;
-        try {
-          const [d, m, y] = adm.split('/');
-          const admMes = parseInt(`${y}${m}`);
-          const refMes = (reg.dataMesReferencia || reg.mesReferencia || '').replace(/-/g, '').slice(0, 6);
-          const refMesInt = parseInt(refMes);
-          return admMes <= refMesInt;
-        } catch { return false; }
-      })()
+      isIrregular,
     };
   };
 
@@ -226,24 +215,21 @@ export default function App() {
     });
     if (res.status === 429) { await delay(2000); return proxyFetch(endpoint, params, retries); }
     if ((res.status === 502 || res.status === 504) && retries > 0) { await delay(3000); return proxyFetch(endpoint, params, retries - 1); }
-    if (!res.ok) { 
-      if (res.status === 400 && endpoint === 'municipio') {
-        console.warn(`Portal API retornou 400 para a página. Ignorando.`);
-        return [];
-      }
-      const t = await res.text(); let msg = t; try { msg = JSON.parse(t)?.detail || t; } catch {} throw new Error(msg); 
+    if (!res.ok) {
+      if (res.status === 400 && endpoint === 'municipio') { console.warn('Portal API 400 — ignorando página.'); return []; }
+      const t = await res.text(); let msg = t; try { msg = JSON.parse(t)?.detail || t; } catch {} throw new Error(msg);
     }
     return res.json();
   };
 
-  // ── Constrói serverMap (Oracle ou CSV) ───────
+  // ── Constrói serverMap ───────────────────────
   const buildServerMap = async () => {
     const map = new Map();
-    const add = (cpfRaw, nome) => {
+    const add = (cpfRaw, nome, extra = {}) => {
       const cpf = normalizarCPF(cpfRaw);
       if (!cpf) return;
       const chave = chaveJS(cpf, nome);
-      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome }); }
+      if (chave) { if (!map.has(chave)) map.set(chave, []); map.get(chave).push({ cpf, nome, ...extra }); }
     };
 
     if (fonteServidores === 'oracle') {
@@ -256,26 +242,19 @@ export default function App() {
       if (!res.ok) { const t = await res.text(); throw new Error(JSON.parse(t)?.detail || t); }
       const { servidores, total } = await res.json();
       setOracleInfo({ total });
-      servidores.forEach(s => {
-        const chave = chaveJS(s.cpf, s.nome);
-        if (chave) {
-          if (!map.has(chave)) map.set(chave, []);
-          map.get(chave).push({ 
-            cpf: s.cpf, 
-            nome: s.nome, 
-            cargo: s.cargo || '',
-            admissao: s.admissao || ''
-          });
-        }
-      });
+      servidores.forEach(s => add(s.cpf, s.nome, { cargo: s.cargo || '', admissao: s.admissao || '' }));
       return { serverMap: map, totalServidores: total };
     } else {
       const { rows, sep, headers } = await parseCSV(file);
-      const cpfIdx = headers.indexOf(config.col_cpf);
-      const nomeIdx = headers.indexOf(config.col_nome);
+      const idx = k => headers.indexOf(config[k]);
+      const cpfIdx = idx('col_cpf'), nomeIdx = idx('col_nome');
+      const cargoIdx = idx('col_cargo'), admIdx = idx('col_admissao');
       rows.slice(1).forEach(row => {
-        const cells = row.split(sep);
-        add(cells[cpfIdx]?.replace(/^"|"$/g, ''), nomeIdx !== -1 ? (cells[nomeIdx]?.replace(/^"|"$/g, '') || '') : '');
+        const c = row.split(sep).map(v => v?.replace(/^"|"$/g, '') || '');
+        add(c[cpfIdx], c[nomeIdx] || '', {
+          cargo: cargoIdx >= 0 ? c[cargoIdx] : '',
+          admissao: admIdx >= 0 ? c[admIdx] : '',
+        });
       });
       return { serverMap: map, totalServidores: rows.length - 1 };
     }
@@ -286,13 +265,12 @@ export default function App() {
     if (fonteServidores === 'csv' && !file) return;
     setLoading(true); setError(null);
     setStatus({ status: 'processing', progress: 0, result: [], message: 'Iniciando...' });
-    setSearchLogs(['Iniciando consulta...']);
-    setFase('processing'); setSearchFilter(''); setAgrupado(false); setExibirTudo(false); setExibirIrregulares(false); setPaginaAtual(1); setExpandedRows(new Set());
+    setFase('processing'); setSearchFilter(''); setViewMode('todos');
+    setPaginaAtual(1); setExpandedRows(new Set());
     cancelRef.current = false;
 
     try {
-      // 1. Carrega servidores (Oracle ou CSV)
-      const { serverMap, totalServidores } = await buildServerMap();
+      const { serverMap } = await buildServerMap();
       if (!serverMap.size) throw new Error('Nenhum servidor carregado — verifique a fonte de dados.');
 
       const meses = getMesesList(config.m_ini, config.m_fim);
@@ -302,11 +280,9 @@ export default function App() {
 
       const flush = () => setStatus(prev => ({ ...prev, result: [...allResults] }));
 
-      // 2. Busca paralela por município ─────────
       if (config.modo === 'municipio') {
         const MAX_PAGINAS = modoTeste ? 100 : Infinity;
 
-        // Busca todas as páginas de UM mês
         const fetchMes = async mes => {
           if (cancelRef.current) return;
           let pagina = 1;
@@ -317,7 +293,7 @@ export default function App() {
               const bf = reg.beneficiarioNovoBolsaFamilia || {};
               const chave = chaveJS(bf.cpfFormatado || '', bf.nome || '');
               const isMatch = chave && serverMap.has(chave);
-              
+
               if (isMatch) {
                 for (const srv of serverMap.get(chave)) {
                   const deduKey = `${srv.cpf}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
@@ -326,7 +302,6 @@ export default function App() {
                   allResults.push({ ...formatResultJS(srv, reg, pagina), isMatch: true });
                 }
               } else {
-                // Adiciona como não match para o modo "Exibir Tudo"
                 const deduKey = `no-match|${bf.nis}|${mes}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                 if (seenResults.has(deduKey)) continue;
                 seenResults.add(deduKey);
@@ -346,18 +321,12 @@ export default function App() {
           }));
         };
 
-        // Processa em lotes de PARALLEL_WORKERS (par e ímpar simultâneos)
         for (let i = 0; i < meses.length; i += PARALLEL_WORKERS) {
           if (cancelRef.current) break;
           const lote = meses.slice(i, i + PARALLEL_WORKERS);
-          setStatus(prev => ({
-            ...prev,
-            message: `Buscando em paralelo: ${lote.map(fmtMes).join(' · ')}`,
-          }));
+          setStatus(prev => ({ ...prev, message: `Buscando: ${lote.map(fmtMes).join(' · ')}` }));
           await Promise.all(lote.map(mes => fetchMes(mes)));
         }
-
-      // 3. Busca sequencial por CPF ─────────────
       } else {
         const todos = [...serverMap.values()].flat();
         const servidores = modoTeste ? todos.slice(0, 500) : todos;
@@ -380,7 +349,7 @@ export default function App() {
                 const deduKey = `${srv.cpf}|${mesRef}|${reg.dataSaque || ''}|${reg.valorSaque ?? reg.valor ?? 0}`;
                 if (seenResults.has(deduKey)) continue;
                 seenResults.add(deduKey);
-                allResults.push(formatResultJS(srv, reg));
+                allResults.push({ ...formatResultJS(srv, reg), isMatch: true });
               }
             }
             flush(); await delay(100);
@@ -401,37 +370,36 @@ export default function App() {
   const handleReset = () => {
     cancelRef.current = false;
     setFase('config'); setStatus(null); setError(null); setSearchFilter('');
-    setAgrupado(false); setExpandedRows(new Set()); setApenasMultiplos(false); setLoading(false);
+    setViewMode('todos'); setExpandedRows(new Set()); setPaginaAtual(1); setLoading(false);
     setOracleInfo(null);
   };
 
   // ── Dados derivados ──────────────────────────
   const allResults = status?.result || [];
+  const matchResults = useMemo(() => allResults.filter(r => r.isMatch), [allResults]);
+
   const filteredResults = useMemo(() => {
-    let filtered = allResults;
-    if (exibirIrregulares) filtered = filtered.filter(r => r.isIrregular);
-    else if (!exibirTudo) filtered = filtered.filter(r => r.isMatch);
-    
-    if (!searchFilter) return filtered;
+    let base = viewMode === 'irregulares' ? matchResults.filter(r => r.isIrregular) : matchResults;
+    if (!searchFilter) return base;
     const q = searchFilter.toLowerCase();
-    return filtered.filter(r => r.servidor?.toLowerCase().includes(q) || r.cpf?.includes(q) || r.municipio?.toLowerCase().includes(q) || r.beneficiario?.toLowerCase().includes(q));
-  }, [allResults, searchFilter, exibirTudo, exibirIrregulares]);
+    return base.filter(r =>
+      r.servidor?.toLowerCase().includes(q) ||
+      r.cpf?.includes(q) ||
+      r.municipio?.toLowerCase().includes(q) ||
+      r.beneficiario?.toLowerCase().includes(q)
+    );
+  }, [matchResults, searchFilter, viewMode]);
 
-  const totalValue   = useMemo(() => allResults.filter(r => r.isMatch).reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
-  const uniqueServers = useMemo(() => new Set(allResults.filter(r => r.isMatch).map(r => `${r.cpf}|${r.servidor}`)).size, [allResults]);
-  const irrCount = useMemo(() => allResults.filter(r => r.isIrregular).length, [allResults]);
-  const irrValue = useMemo(() => allResults.filter(r => r.isIrregular).reduce((s, r) => s + (r.valor || 0), 0), [allResults]);
-  const topMes = useMemo(() => {
-    const counts = {}; for (const r of allResults) counts[r.mes] = (counts[r.mes] || 0) + 1;
-    const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
-    return top?.[0] ? fmtMes(top[0]) : null;
-  }, [allResults]);
+  const totalValue    = useMemo(() => matchResults.reduce((s, r) => s + (r.valor || 0), 0), [matchResults]);
+  const uniqueServers = useMemo(() => new Set(matchResults.map(r => r.cpf)).size, [matchResults]);
+  const irrCount      = useMemo(() => new Set(matchResults.filter(r => r.isIrregular).map(r => r.cpf)).size, [matchResults]);
+  const irrValue      = useMemo(() => matchResults.filter(r => r.isIrregular).reduce((s, r) => s + (r.valor || 0), 0), [matchResults]);
 
-  const groupedResults = useMemo(() => {
+  const groupedAll = useMemo(() => {
     const map = new Map();
     for (const r of filteredResults) {
       const gKey = `${r.cpf}|${r.servidor}`;
-      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, matricula: r.matricula, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0 });
+      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, matricula: r.matricula, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0, isIrregular: false });
       const g = map.get(gKey);
       if (!g.nis && r.nis) g.nis = r.nis;
       if (r.nis) g.nisSet.add(r.nis);
@@ -439,40 +407,34 @@ export default function App() {
       g.totalValor += r.valor || 0;
       if (r.isIrregular) g.isIrregular = true;
     }
-    const all = [...map.values()]
+    return [...map.values()]
       .map(g => ({ ...g, nisCount: g.nisSet.size }))
       .sort((a, b) => b.ocorrencias.length - a.ocorrencias.length || b.totalValor - a.totalValor);
-    return apenasMultiplos ? all.filter(g => g.ocorrencias.length > 5) : all;
-  }, [filteredResults, apenasMultiplos]);
+  }, [filteredResults]);
 
-  const paginatedResults = useMemo(() => {
-    const target = agrupado ? groupedResults : filteredResults;
+  const isGrouped = viewMode === 'agrupado' || viewMode === 'irregulares';
+  const displayList = isGrouped ? groupedAll : filteredResults;
+
+  const totalPaginas = Math.ceil(displayList.length / itensPorPagina);
+  const paginatedItems = useMemo(() => {
     const start = (paginaAtual - 1) * itensPorPagina;
-    return target.slice(start, start + itensPorPagina);
-  }, [agrupado, groupedResults, filteredResults, paginaAtual]);
-
-  const totalPaginas = useMemo(() => {
-    const target = agrupado ? groupedResults : filteredResults;
-    return Math.ceil(target.length / itensPorPagina);
-  }, [agrupado, groupedResults, filteredResults]);
+    return displayList.slice(start, start + itensPorPagina);
+  }, [displayList, paginaAtual, itensPorPagina]);
 
   const toggleRow = gKey => setExpandedRows(prev => { const next = new Set(prev); next.has(gKey) ? next.delete(gKey) : next.add(gKey); return next; });
 
   const exportCSV = () => {
-    if (!allResults.length) return;
-    const hdrs = ['Servidor', 'CPF', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Irregularidade', 'Página'];
+    if (!matchResults.length) return;
+    const hdrs = ['Servidor', 'CPF', 'Matrícula', 'NIS', 'Beneficiário', 'Município', 'UF', 'Mês Ref.', 'Data Saque', 'Valor', 'Irregular', 'Página'];
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const csv = '﻿' + [hdrs.join(','), ...allResults.map(r => [r.servidor, r.cpf, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.isIrregular ? 'SIM' : 'NÃO', r.pagina ?? ''].map(esc).join(','))].join('\n');
+    const csv = '﻿' + [hdrs.join(','), ...matchResults.map(r => [r.servidor, r.cpf, r.matricula, r.nis, r.beneficiario, r.municipio, r.uf, r.mes, r.data_saque, r.valor, r.isIrregular ? 'SIM' : 'NÃO', r.pagina ?? ''].map(esc).join(','))].join('\n');
     const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
     Object.assign(document.createElement('a'), { href: url, download: 'resultados_bolsafamilia.csv' }).click();
     URL.revokeObjectURL(url);
   };
 
-  // canStart: Oracle precisa só do ibge; CSV precisa do arquivo + col_cpf
   const canStart = !loading && (config.modo !== 'municipio' || config.ibge) && (
-    fonteServidores === 'oracle'
-      ? true
-      : (file && config.col_cpf)
+    fonteServidores === 'oracle' ? true : (file && config.col_cpf)
   );
 
   const labelPeriodo = `${fmtMes(config.m_ini)} – ${fmtMes(config.m_fim)}`;
@@ -499,6 +461,13 @@ export default function App() {
             <RotateCcw size={12} /> Nova Consulta
           </button>
         )}
+        <button
+          className={`topbar-btn${modoTeste ? ' topbar-btn-amber' : ''}`}
+          onClick={() => setModoTeste(t => !t)}
+          title={modoTeste ? 'Modo Teste ativo — clique para desativar' : 'Modo Teste inativo — clique para ativar'}
+        >
+          {modoTeste ? '⚠ TESTE' : '✓ Completo'}
+        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', opacity: 0.7 }}>
           {apiHealth === 'ok'       && <><div className="dot green" /> API conectada</>}
           {apiHealth === 'error'    && <><div className="dot red"   /> API offline</>}
@@ -528,40 +497,33 @@ export default function App() {
               <div className="field">
                 <label>Fonte dos servidores</label>
                 <div className="source-toggle" style={{ marginTop: '0.25rem' }}>
-                  <button
-                    className={`source-btn ${fonteServidores === 'oracle' ? 'active' : ''}`}
-                    onClick={() => setFonteServidores('oracle')}>
+                  <button className={`source-btn ${fonteServidores === 'oracle' ? 'active' : ''}`} onClick={() => setFonteServidores('oracle')}>
                     <Database size={13} /> Oracle
                   </button>
-                  <button
-                    className={`source-btn ${fonteServidores === 'csv' ? 'active' : ''}`}
-                    onClick={() => setFonteServidores('csv')}>
+                  <button className={`source-btn ${fonteServidores === 'csv' ? 'active' : ''}`} onClick={() => setFonteServidores('csv')}>
                     <Upload size={13} /> CSV / Excel
                   </button>
                 </div>
               </div>
 
-              {/* ── Configurações do Banco (Oracle) ── */}
+              {/* ── Oracle: campos diretos (sem collapsible) ── */}
               {fonteServidores === 'oracle' && (
-                <div style={{ marginBottom: '1.25rem' }}>
-                  <button type="button" className="advanced-toggle" onClick={() => setShowBancoConfig(a => !a)}>
-                    <ChevronRight size={11} style={{ transform: showBancoConfig ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
-                    <Database size={11} /> Configurações do Banco
-                  </button>
-                  {showBancoConfig && (
-                    <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
-                      <div className="field" style={{ marginBottom: '0.6rem' }}>
-                        <label>Código da Entidade</label>
-                        <input type="text" value={oracleConfig.ent_codigo}
-                          onChange={e => setOracleConfig(p => ({ ...p, ent_codigo: e.target.value }))} />
-                      </div>
-                      <div className="field" style={{ marginBottom: 0 }}>
-                        <label>Exercício (ano)</label>
-                        <input type="text" maxLength={4} value={oracleConfig.exercicio}
-                          onChange={e => setOracleConfig(p => ({ ...p, exercicio: e.target.value }))} />
-                      </div>
+                <div className="mapping-box" style={{ marginBottom: '1.1rem' }}>
+                  <div className="mapping-title" style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                    <Database size={11} /> Conexão Oracle
+                  </div>
+                  <div className="field-row">
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>Código da Entidade</label>
+                      <input type="text" value={oracleConfig.ent_codigo}
+                        onChange={e => setOracleConfig(p => ({ ...p, ent_codigo: e.target.value }))} />
                     </div>
-                  )}
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>Exercício (ano)</label>
+                      <input type="text" maxLength={4} value={oracleConfig.exercicio}
+                        onChange={e => setOracleConfig(p => ({ ...p, exercicio: e.target.value }))} />
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -584,37 +546,17 @@ export default function App() {
                       <button type="button" className="advanced-toggle" style={{ fontSize: '0.68rem', opacity: 0.8 }} onClick={() => setShowMapping(a => !a)}>
                         <Settings size={10} /> {showMapping ? 'Ocultar mapeamento' : 'Ajustar mapeamento de colunas'}
                       </button>
-                      
                       {showMapping && (
                         <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
-                          <div className="field" style={{ marginBottom: '0.7rem' }}>
-                            <label>Coluna de CPF *</label>
-                            <select value={config.col_cpf} onChange={e => setConfig({ ...config, col_cpf: e.target.value })}>
-                              <option value="">— Selecione —</option>
-                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="field" style={{ marginBottom: '0.7rem' }}>
-                            <label>Coluna de Nome</label>
-                            <select value={config.col_nome} onChange={e => setConfig({ ...config, col_nome: e.target.value })}>
-                              <option value="">— Selecione —</option>
-                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="field" style={{ marginBottom: '0.7rem' }}>
-                            <label>Coluna de Cargo</label>
-                            <select value={config.col_cargo} onChange={e => setConfig({ ...config, col_cargo: e.target.value })}>
-                              <option value="">— Selecione —</option>
-                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
-                          <div className="field" style={{ marginBottom: 0 }}>
-                            <label>Coluna de Admissão</label>
-                            <select value={config.col_admissao} onChange={e => setConfig({ ...config, col_admissao: e.target.value })}>
-                              <option value="">— Selecione —</option>
-                              {columns.map(c => <option key={c} value={c}>{c}</option>)}
-                            </select>
-                          </div>
+                          {[['col_cpf', 'Coluna de CPF *'], ['col_nome', 'Coluna de Nome'], ['col_cargo', 'Coluna de Cargo'], ['col_admissao', 'Coluna de Admissão']].map(([key, lbl], idx, arr) => (
+                            <div className="field" key={key} style={{ marginBottom: idx < arr.length - 1 ? '0.7rem' : 0 }}>
+                              <label>{lbl}</label>
+                              <select value={config[key]} onChange={e => setConfig({ ...config, [key]: e.target.value })}>
+                                <option value="">— Selecione —</option>
+                                {columns.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                            </div>
+                          ))}
                         </div>
                       )}
                     </div>
@@ -622,41 +564,30 @@ export default function App() {
                 </>
               )}
 
-              {/* ── Período e Modo ── */}
-              <div className="field">
-                <label>Mês de Referência (YYYYMM)</label>
+              {/* ── Período via input[type=month] ── */}
+              <div className="field" style={{ marginTop: '1.1rem' }}>
+                <label>Período de referência</label>
                 <div className="field-row">
-                  <input type="text" placeholder="Início" value={config.m_ini} maxLength={6} onChange={e => setConfig({ ...config, m_ini: e.target.value })} />
-                  <input type="text" placeholder="Fim" value={config.m_fim} maxLength={6} onChange={e => setConfig({ ...config, m_fim: e.target.value })} />
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>De</div>
+                    <input type="month" value={toMonthInput(config.m_ini)}
+                      onChange={e => setConfig({ ...config, m_ini: fromMonthInput(e.target.value) })} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>Até</div>
+                    <input type="month" value={toMonthInput(config.m_fim)}
+                      onChange={e => setConfig({ ...config, m_fim: fromMonthInput(e.target.value) })} />
+                  </div>
                 </div>
               </div>
 
+              {/* ── Modo ── */}
               <div className="field">
                 <label>Modo de cruzamento</label>
                 <div className="mode-toggle">
                   <button className={config.modo === 'municipio' ? 'active' : ''} onClick={() => setConfig({...config, modo: 'municipio'})}>Município</button>
                   <button className={config.modo === 'cpf' ? 'active' : ''} onClick={() => setConfig({...config, modo: 'cpf'})}>Individual (CPF)</button>
                 </div>
-              </div>
-
-              <div className="field">
-                <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
-                  <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
-                  <Database size={11} /> Endereço do Motor (API)
-                </button>
-                {showAdvanced && (
-                  <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
-                    <div className="field" style={{ marginBottom: 0 }}>
-                      <label>URL da API (Local ou Remota)</label>
-                      <input type="text" placeholder="http://localhost:8000" value={baseUrl}
-                        onChange={e => setBaseUrl(e.target.value)} />
-                      <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: '8px', lineHeight: '1.4' }}>
-                        • Use <strong>http://localhost:8000</strong> se estiver nesta máquina.<br/>
-                        • Cole o link do <strong>ngrok</strong> se estiver em outra máquina.
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* ── Seletor município ── */}
@@ -668,8 +599,7 @@ export default function App() {
                   </label>
                   <div className="combobox full-width">
                     <Search className="search-icon-inside" size={16} />
-                    <input type="text"
-                      className="input-large"
+                    <input type="text" className="input-large"
                       placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Digite o nome do município...'}
                       value={municipioSearch} disabled={municipios.length === 0}
                       onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
@@ -677,10 +607,7 @@ export default function App() {
                     {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
                     {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
                       const q = municipioSearch.toLowerCase();
-                      const filtered = municipios.filter(m =>
-                        m.uf === 'MT' &&
-                        (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))
-                      );
+                      const filtered = municipios.filter(m => m.uf === 'MT' && (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch)));
                       return (
                         <ul className="combobox-dropdown dropdown-large">
                           {filtered.length === 0
@@ -701,28 +628,26 @@ export default function App() {
 
               <div className="divider" />
 
-              {/* ── Avançado ── */}
+              {/* ── Avançado (API key + URL) ── */}
               <button type="button" className="advanced-toggle" onClick={() => setShowAdvanced(a => !a)}>
                 <ChevronRight size={11} style={{ transform: showAdvanced ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
                 <Settings size={11} /> Configurações avançadas
               </button>
               {showAdvanced && (
                 <>
-                  <div className="field" style={{ marginBottom: '0.75rem' }}>
+                  <div className="field" style={{ marginBottom: '0.6rem' }}>
                     <label>Chave de API (sobrepõe a do servidor)</label>
                     <input type="password" placeholder="Chave do Portal da Transparência" value={config.api_key} onChange={e => setConfig({ ...config, api_key: e.target.value })} />
                   </div>
                   <div className="field" style={{ marginBottom: '0.75rem' }}>
-                    <label>URL da API (para uso local)</label>
-                    <input type="text" placeholder="Ex: http://localhost:8000" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                    <label>URL da API (local ou ngrok)</label>
+                    <input type="text" placeholder="http://localhost:8000" value={baseUrl} onChange={e => setBaseUrl(e.target.value)} />
+                    <p style={{ fontSize: '0.65rem', color: 'var(--text-3)', marginTop: '6px', lineHeight: '1.4' }}>
+                      Deixe em branco para usar o proxy padrão. Cole o link do ngrok para acesso remoto.
+                    </p>
                   </div>
                 </>
               )}
-
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.75rem', color: modoTeste ? 'var(--amber)' : 'var(--text-3)', marginBottom: '1rem', fontWeight: 500 }}>
-                <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} />
-                {modoTeste ? '⚠ Modo Teste — 100 págs/mês · 500 CPFs' : 'Modo Teste desativado — execução completa'}
-              </label>
 
               <button className="btn btn-primary btn-full" disabled={!canStart} onClick={startCrossing}>
                 {loading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
@@ -736,7 +661,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Painel de resultados vazio */}
           <div className="results-panel">
             <div className="results-panel-header">
               <span className="results-panel-title">Resultados</span>
@@ -759,31 +683,33 @@ export default function App() {
     <>
       <Topbar />
       <div className="page fade-up">
+        {/* ── Stat cards ── */}
         <div className="stats-row cols-4" style={{ marginTop: '1.5rem' }}>
           <div className="stat-card">
-            <div className="stat-label">Servidores únicos</div>
+            <div className="stat-label">Servidores com ocorrência</div>
             <div className={`stat-value${uniqueServers > 0 ? ' danger' : ''}`}>{uniqueServers.toLocaleString('pt-BR')}</div>
-            <div className="stat-sub">com ocorrências no BF</div>
+            <div className="stat-sub">encontrados no Bolsa Família</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Total de alertas</div>
-            <div className={`stat-value${allResults.length > 0 ? ' danger' : ''}`}>{allResults.length.toLocaleString('pt-BR')}</div>
-            <div className="stat-sub">registros de saque</div>
+            <div className="stat-label">Total de registros</div>
+            <div className={`stat-value${matchResults.length > 0 ? ' danger' : ''}`}>{matchResults.length.toLocaleString('pt-BR')}</div>
+            <div className="stat-sub">saques identificados</div>
           </div>
           <div className="stat-card">
             <div className="stat-label">Irregularidades</div>
-            <div className={`stat-value ${irrCount > 0 ? 'danger' : 'muted'}`}>{irrCount || '—'}</div>
-            <div className="stat-sub">casos detectados</div>
+            <div className={`stat-value${irrCount > 0 ? ' danger' : ' muted'}`}>{irrCount > 0 ? irrCount.toLocaleString('pt-BR') : isProcessing ? '…' : '—'}</div>
+            <div className="stat-sub">servidores com saque indevido</div>
           </div>
           <div className="stat-card">
-            <div className="stat-label">Valor em Risco</div>
-            <div className={`stat-value ${irrValue > 0 ? 'danger' : 'muted'}`} style={{ fontSize: '1.25rem' }}>
-              {irrValue > 0 ? `R$ ${irrValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}
+            <div className="stat-label">Valor em risco</div>
+            <div className={`stat-value muted${irrValue > 0 ? ' danger' : ''}`} style={{ fontSize: '1.25rem' }}>
+              {irrValue > 0 ? `R$ ${irrValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : isProcessing ? '…' : '—'}
             </div>
-            <div className="stat-sub">total irregular</div>
+            <div className="stat-sub">soma dos casos irregulares · {labelPeriodo}</div>
           </div>
         </div>
 
+        {/* ── Banner de config ── */}
         <div className="config-banner">
           <div className="config-banner-info">
             <span><strong>Servidores:</strong> {labelFonte}{oracleInfo ? ` (${oracleInfo.total.toLocaleString('pt-BR')} carregados)` : ''}</span>
@@ -801,35 +727,35 @@ export default function App() {
         <div className="results-panel">
           <div className="results-panel-header">
             <span className="results-panel-title">{isProcessing ? 'Processando…' : 'Resultados do cruzamento'}</span>
-            {allResults.length > 0 && (
-              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                <button className={`btn btn-sm ${agrupado ? 'btn-active' : 'btn-ghost'}`}
-                  onClick={() => { setAgrupado(a => !a); setExpandedRows(new Set()); }}>
-                  <Users size={12} /> {agrupado ? 'Ver todos' : 'Agrupar por servidor'}
-                </button>
-                <button className={`btn btn-sm ${exibirIrregulares ? 'btn-active-red' : 'btn-ghost'}`}
-                  onClick={() => { setExibirIrregulares(v => !v); if (!exibirIrregulares) setExibirTudo(true); }}>
-                  <AlertCircle size={12} /> {exibirIrregulares ? 'Ver todos' : 'Apenas Irregulares'}
-                </button>
-                <button className={`btn btn-sm ${exibirTudo ? 'btn-active' : 'btn-ghost'}`}
-                  onClick={() => { setExibirTudo(a => !a); if (exibirIrregulares) setExibirIrregulares(false); }}>
-                  <Search size={12} /> {exibirTudo ? 'Ocultar sem match' : 'Mostrar tudo (API)'}
-                </button>
-                {agrupado && (
-                  <button className={`btn btn-sm ${apenasMultiplos ? 'btn-danger-ghost btn-active' : 'btn-ghost'}`}
-                    onClick={() => setApenasMultiplos(a => !a)}
-                    title="Exibir apenas servidores com mais de 5 ocorrências">
-                    ⚠ {apenasMultiplos ? 'Todos' : '> 5 ocorrências'}
+
+            {matchResults.length > 0 && (
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div className="view-tabs">
+                  <button className={`view-tab ${viewMode === 'todos' ? 'active' : ''}`}
+                    onClick={() => { setViewMode('todos'); setExpandedRows(new Set()); setPaginaAtual(1); }}>
+                    Todos
+                    <span className="view-tab-count">{matchResults.length}</span>
                   </button>
-                )}
+                  <button className={`view-tab ${viewMode === 'irregulares' ? 'active active-red' : ''}`}
+                    onClick={() => { setViewMode('irregulares'); setExpandedRows(new Set()); setPaginaAtual(1); }}
+                    title="Servidores com saque após data de admissão">
+                    <AlertTriangle size={11} /> Irregulares
+                    {irrCount > 0 && <span className="view-tab-count red">{irrCount}</span>}
+                  </button>
+                  <button className={`view-tab ${viewMode === 'agrupado' ? 'active' : ''}`}
+                    onClick={() => { setViewMode('agrupado'); setExpandedRows(new Set()); setPaginaAtual(1); }}>
+                    <Users size={11} /> Por servidor
+                    <span className="view-tab-count">{uniqueServers}</span>
+                  </button>
+                </div>
                 <button className="btn btn-sm btn-primary" onClick={exportCSV}>
                   <Download size={12} /> Exportar CSV
                 </button>
               </div>
             )}
           </div>
-          <div className="results-panel-body">
 
+          <div className="results-panel-body">
             {isProcessing && (
               <div className="progress-wrap">
                 <div className="progress-meta">
@@ -839,7 +765,7 @@ export default function App() {
                   <span style={{ fontWeight: 600 }}>{status?.progress || 0}%</span>
                 </div>
                 <div className="progress-track"><div className="progress-fill" style={{ width: `${status?.progress || 0}%` }} /></div>
-                {allResults.length > 0 && <div className="progress-hint">{allResults.length} correspondência{allResults.length !== 1 ? 's' : ''} encontrada{allResults.length !== 1 ? 's' : ''} até agora</div>}
+                {matchResults.length > 0 && <div className="progress-hint">{matchResults.length} correspondência{matchResults.length !== 1 ? 's' : ''} encontrada{matchResults.length !== 1 ? 's' : ''} até agora</div>}
               </div>
             )}
 
@@ -849,7 +775,7 @@ export default function App() {
               </div>
             )}
 
-            {!isProcessing && status?.status === 'completed' && allResults.length === 0 && (
+            {!isProcessing && status?.status === 'completed' && matchResults.length === 0 && (
               <div className="empty" style={{ color: 'var(--green)' }}>
                 <CheckCircle2 size={40} style={{ opacity: 0.4, marginBottom: '0.25rem' }} />
                 <p style={{ fontWeight: 600 }}>Nenhum servidor encontrado como beneficiário.</p>
@@ -857,256 +783,211 @@ export default function App() {
               </div>
             )}
 
-            {allResults.length > 0 && (
+            {matchResults.length > 0 && (
               <>
                 <div className="filter-wrap">
                   <Filter size={13} />
-                  <input type="text" placeholder="Filtrar por nome, CPF ou município…" value={searchFilter} onChange={e => setSearchFilter(e.target.value)} />
+                  <input type="text" placeholder="Filtrar por nome, CPF ou município…" value={searchFilter}
+                    onChange={e => { setSearchFilter(e.target.value); setPaginaAtual(1); }} />
                 </div>
 
-                {!agrupado && (
+                {/* ── Vista flat (Todos) ── */}
+                {!isGrouped && (
                   <div className="table-wrap">
                     <table>
                       <thead><tr>
                         <th style={{ width: 36 }}>#</th>
                         <th>Servidor</th><th>CPF</th><th>Beneficiário (API)</th>
-                        <th>Município / UF</th><th>Mês Ref.</th>{exibirIrregulares && <th>Justificativa</th>}<th>Valor</th>
+                        <th>Município / UF</th><th>Mês Ref.</th><th>Valor</th>
                         {config.modo === 'municipio' && <th style={{ width: 56 }}>Pág.</th>}
                       </tr></thead>
                       <tbody>
-                        {paginatedResults.map((row, i) => (
-                          <tr key={i} className={!row.isMatch ? 'row-dim' : ''}>
-                             <td className="td-num">{(paginaAtual - 1) * itensPorPagina + i + 1}</td>
-                             <td className="td-bold">
-                               {row.servidor}
-                               {!row.isMatch && <span className="label-tag api" style={{ marginLeft: 8 }}>API</span>}
-                               {row.isMatch && <CheckCircle2 size={12} style={{ marginLeft: 8, color: 'var(--green)' }} />}
-                               {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
-                             </td>
-                              <td className="td-mono">
-                                <div>{row.cpf}</div>
-                                <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula || '—'}</div>
-                              </td>
-
-                             <td>{row.beneficiario}</td>
-                             <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
-                             <td className="td-dim">{fmtMes(row.mes)}</td>
-                             {exibirIrregulares && (
-                                <td className="td-dim">
-                                  {row.isIrregular ? (
-                                    <>
-                                      <div style={{ color: 'var(--red)', fontWeight: 700 }}>CONFIRMADO POR FOLHA</div>
-                                      <div style={{ fontSize: '0.68rem', opacity: 0.8 }}>Ref. {fmtMes(row.mes)} · Ativo via {row.tipo_ato || 'Cadastro'}</div>
-                                    </>
-                                  ) : '—'}
-                                </td>
-                              )}
-                             <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                             {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
-                           </tr>
+                        {paginatedItems.map((row, i) => (
+                          <tr key={i}>
+                            <td className="td-num">{(paginaAtual - 1) * itensPorPagina + i + 1}</td>
+                            <td className="td-bold">
+                              {row.servidor}
+                              {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>IRREGULAR</span>}
+                            </td>
+                            <td className="td-mono">
+                              <div>{row.cpf}</div>
+                              {row.matricula && <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {row.matricula}</div>}
+                            </td>
+                            <td>{row.beneficiario}</td>
+                            <td className="td-dim">{row.municipio}{row.uf ? ` / ${row.uf}` : ''}</td>
+                            <td className="td-dim">{fmtMes(row.mes)}</td>
+                            <td className="td-valor">R$ {(row.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                            {config.modo === 'municipio' && <td className="td-num td-dim">{row.pagina ?? '—'}</td>}
+                          </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
 
-                {agrupado && (
-                  <div className="table-wrap">
-                    <table>
-                      <thead><tr>
-                        <th style={{ width: 28 }}></th>
-                        <th>Servidor</th><th>CPF</th><th>Cargo / Órgão</th><th>Ocorrências</th><th>Meses</th>{exibirIrregulares && <th>Justificativa</th>}<th>Valor Total</th>
-                      </tr></thead>
-                      <tbody>
-                        {paginatedResults.map(g => {
-                          const gKey = `${g.cpf}|${g.servidor}`;
-                          const expanded = expandedRows.has(gKey);
-                          const mesesG = [...new Set(g.ocorrencias.map(o => o.mes))].sort().map(fmtMes);
-                          const alerta = g.ocorrencias.length > 5;
-                          return (
-                            <React.Fragment key={gKey}>
-                              <tr className={`row-group${expanded ? ' open' : ''}${alerta ? ' row-alert' : ''}`} onClick={() => toggleRow(gKey)}>
-                                <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
-                                  {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                                </td>
-                                <td className="td-bold">
-                                  {alerta && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ {g.ocorrencias.length}×</span>}
-                                  {g.servidor}
-                                  {g.isIrregular && <span className="label-tag" style={{ marginLeft: 8, backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#ef4444', border: '1px solid rgba(239, 68, 68, 0.2)' }}>IRREGULAR</span>}
-                                </td>
-                                 <td className="td-mono">
-                                   <div>{g.cpf}</div>
-                                   <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {g.matricula || '—'}</div>
-                                 </td>
-                                <td><span className={`badge-count${alerta ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
-                                <td className="td-dim">{mesesG.join(' · ')}</td>
-                                {exibirIrregulares && (
-                                  <td style={{ fontSize: '0.72rem', color: 'var(--red)', fontWeight: 500 }}>
-                                    Conflito: Admissão em {g.ocorrencias[0].admissao}
-                                  </td>
-                                )}
-                                <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                              </tr>
-                              {expanded && g.ocorrencias.map((o, i) => {
-                                const hired = o.admissao ? new Date(o.admissao.split('/').reverse().join('-')) : null;
-                                const ref = new Date(o.mes.slice(0,4), parseInt(o.mes.slice(4))-1, 1);
-                                const isAfter = hired && ref >= hired;
-                                
-                                return (
-                                  <tr key={i} className="row-sub">
-                                    <td></td>
-                                    <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>{o.beneficiario || '—'}</td>
-                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>
-                                      {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
-                                      {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
+                {/* ── Vista agrupada (Agrupado + Irregulares) ── */}
+                {isGrouped && (
+                  <>
+                    {groupedAll.length === 0 && (
+                      <div className="empty" style={{ color: 'var(--green)', padding: '2.5rem' }}>
+                        <CheckCircle2 size={32} style={{ opacity: 0.4, marginBottom: '0.25rem' }} />
+                        <p style={{ fontWeight: 600 }}>
+                          {viewMode === 'irregulares' ? 'Nenhuma irregularidade detectada.' : 'Sem resultados para agrupar.'}
+                        </p>
+                      </div>
+                    )}
+                    {groupedAll.length > 0 && (
+                      <div className="table-wrap">
+                        <table>
+                          <thead><tr>
+                            <th style={{ width: 28 }}></th>
+                            <th>Servidor</th><th>CPF</th><th>NIS</th>
+                            <th>Ocorrências</th><th>Meses</th><th>Valor Total</th>
+                          </tr></thead>
+                          <tbody>
+                            {paginatedItems.map(g => {
+                              const gKey = `${g.cpf}|${g.servidor}`;
+                              const expanded = expandedRows.has(gKey);
+                              const mesesUnicos = [...new Set(g.ocorrencias.map(o => o.mes))].sort();
+                              const mesesLabel = mesesUnicos.length <= 3
+                                ? mesesUnicos.map(fmtMes).join(' · ')
+                                : `${fmtMes(mesesUnicos[0])} – ${fmtMes(mesesUnicos[mesesUnicos.length - 1])} (${mesesUnicos.length} meses)`;
+                              return (
+                                <React.Fragment key={gKey}>
+                                  <tr className={`row-group${expanded ? ' open' : ''}${g.isIrregular ? ' row-alert' : ''}`} onClick={() => toggleRow(gKey)}>
+                                    <td style={{ textAlign: 'center', color: 'var(--text-3)' }}>
+                                      {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                     </td>
-                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)}</td>
-                                    {exibirIrregulares && (
-                                      <td style={{ fontSize: '0.72rem', color: 'var(--red)' }}>
-                                        Competência {fmtMes(o.mes)} pós-{o.tipo_ato || 'admissão'} ({o.admissao})
-                                      </td>
-                                    )}
-                                    <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                    <td className="td-bold">
+                                      {g.isIrregular && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ IRREGULAR</span>}
+                                      {g.servidor}
+                                    </td>
+                                    <td className="td-mono">
+                                      <div>{g.cpf}</div>
+                                      {g.matricula && <div style={{ fontSize: '0.65rem', opacity: 0.7 }}>Mat: {g.matricula}</div>}
+                                    </td>
+                                    <td className="td-mono td-dim">
+                                      {g.nis || '—'}
+                                      {g.nisCount > 1 && <span className="badge badge-amber" style={{ marginLeft: '6px', fontSize: '0.62rem' }} title={`${g.nisCount} NIS distintos`}>⚠ {g.nisCount} NIS</span>}
+                                    </td>
+                                    <td><span className={`badge-count${g.isIrregular ? ' badge-count-alert' : ''}`}>{g.ocorrencias.length}×</span></td>
+                                    <td className="td-dim" style={{ fontSize: '0.78rem' }}>{mesesLabel}</td>
+                                    <td className="td-valor">R$ {g.totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
                                   </tr>
-                                );
-                              })}
-                            </React.Fragment>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                  {expanded && g.ocorrencias.map((o, i) => (
+                                    <tr key={i} className="row-sub">
+                                      <td></td>
+                                      <td colSpan={2} style={{ paddingLeft: '2rem', fontSize: '0.78rem', color: 'var(--text-2)' }}>
+                                        {o.beneficiario || '—'}
+                                        {o.isIrregular && o.admissao && (
+                                          <div style={{ fontSize: '0.68rem', color: 'var(--red)', marginTop: '2px' }}>
+                                            Admissão: {o.admissao} · Saque em {fmtMes(o.mes)}
+                                          </div>
+                                        )}
+                                      </td>
+                                      <td className="td-mono td-dim" style={{ fontSize: '0.78rem' }}>{o.nis || '—'}</td>
+                                      <td className="td-dim" style={{ fontSize: '0.78rem' }}>
+                                        {o.municipio}{o.uf ? ` / ${o.uf}` : ''}
+                                        {config.modo === 'municipio' && o.pagina != null && <span className="pagina-tag">p.{o.pagina}</span>}
+                                      </td>
+                                      <td className="td-dim" style={{ fontSize: '0.78rem' }}>{fmtMes(o.mes)} · {o.data_saque || '—'}</td>
+                                      <td className="td-valor" style={{ fontSize: '0.78rem' }}>R$ {(o.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
+                                    </tr>
+                                  ))}
+                                </React.Fragment>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
                 )}
 
                 {searchFilter && (
                   <p style={{ fontSize: '0.72rem', color: 'var(--text-3)', marginTop: '0.5rem', textAlign: 'right' }}>
-                    {agrupado ? `${groupedResults.length} de ${uniqueServers} servidores` : `${filteredResults.length} de ${allResults.length} registros`}
+                    {isGrouped ? `${groupedAll.length} de ${uniqueServers} servidores` : `${filteredResults.length} de ${matchResults.length} registros`}
                   </p>
                 )}
 
                 <div className="summary-bar">
-                  <span>{uniqueServers} servidor{uniqueServers !== 1 ? 'es' : ''} único{uniqueServers !== 1 ? 's' : ''} · {allResults.length} ocorrência{allResults.length !== 1 ? 's' : ''}</span>
+                  <span>{uniqueServers} servidor{uniqueServers !== 1 ? 'es' : ''} · {matchResults.length} ocorrência{matchResults.length !== 1 ? 's' : ''} · {irrCount} irregular{irrCount !== 1 ? 'es' : ''}</span>
                   <span>Total: <strong>R$ {totalValue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</strong></span>
                 </div>
-                <div className="pagination">
-                  <div className="pagination-controls">
-                    <span>Exibir:</span>
-                    <select 
-                      className="pagination-select"
-                      value={itensPorPagina} 
-                      onChange={(e) => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}
-                    >
-                      <option value={25}>25 por página</option>
-                      <option value={50}>50 por página</option>
-                      <option value={100}>100 por página</option>
-                    </select>
-                  </div>
-                  
-                  <div className="pagination-nav">
-                    <button 
-                      className="pagination-btn"
-                      disabled={paginaAtual === 1} 
-                      onClick={() => { setPaginaAtual(p => p - 1); window.scrollTo(0,0); }}
-                    >
-                      Anterior
-                    </button>
-                    
-                    <span className="pagination-pages">
-                      Página <strong>{paginaAtual}</strong> de {Math.ceil((agrupado ? groupedResults.length : filteredResults.length) / itensPorPagina)}
-                    </span>
 
-                    <button 
-                      className="pagination-btn"
-                      disabled={paginaAtual >= Math.ceil((agrupado ? groupedResults.length : filteredResults.length) / itensPorPagina)} 
-                      onClick={() => { setPaginaAtual(p => p + 1); window.scrollTo(0,0); }}
-                    >
-                      Próxima
-                    </button>
+                {/* ── Paginação ── */}
+                {totalPaginas > 1 && (
+                  <div className="pagination">
+                    <div className="pagination-controls">
+                      <span>Exibir:</span>
+                      <select className="pagination-select" value={itensPorPagina}
+                        onChange={e => { setItensPorPagina(Number(e.target.value)); setPaginaAtual(1); }}>
+                        <option value={25}>25 por página</option>
+                        <option value={50}>50 por página</option>
+                        <option value={100}>100 por página</option>
+                      </select>
+                    </div>
+                    <div className="pagination-nav">
+                      <button className="pagination-btn" disabled={paginaAtual === 1}
+                        onClick={() => { setPaginaAtual(p => p - 1); window.scrollTo(0, 0); }}>Anterior</button>
+                      <span className="pagination-pages">Página <strong>{paginaAtual}</strong> de {totalPaginas}</span>
+                      <button className="pagination-btn" disabled={paginaAtual >= totalPaginas}
+                        onClick={() => { setPaginaAtual(p => p + 1); window.scrollTo(0, 0); }}>Próxima</button>
+                    </div>
                   </div>
-                </div>
+                )}
 
+                {/* ── Info box ── */}
                 <div className="info-box-modern">
                   <h2 className="info-main-title">Como funciona este monitor de auditoria</h2>
-                  
                   <div className="info-grid-modern">
-                    {/* Coluna 1: Abas e Filtros */}
                     <div className="info-col">
-                      <div className="info-section-header">
-                        <Layout size={18} />
-                        <h3>O que significa cada filtro</h3>
-                      </div>
+                      <div className="info-section-header"><Layout size={18} /><h3>O que significa cada filtro</h3></div>
                       <div className="info-list">
                         <div className="info-list-item">
                           <span className="dot-indicator blue"></span>
-                          <div>
-                            <strong>Ver todos</strong>
-                            <p>Exibe todos os servidores que possuem registros de recebimento no Bolsa Família no período selecionado.</p>
-                          </div>
+                          <div><strong>Todos</strong><p>Servidores com qualquer registro de recebimento no Bolsa Família no período selecionado.</p></div>
                         </div>
                         <div className="info-list-item">
                           <span className="dot-indicator red"></span>
-                          <div>
-                            <strong>Apenas Irregulares</strong>
-                            <p>Filtra apenas casos onde o saque do benefício ocorreu <strong>após ou no mesmo mês</strong> da admissão no cargo público.</p>
-                          </div>
+                          <div><strong>Irregulares</strong><p>Casos onde o saque ocorreu <strong>após ou no mesmo mês</strong> da admissão no cargo público.</p></div>
                         </div>
                         <div className="info-list-item">
                           <span className="dot-indicator ghost"></span>
-                          <div>
-                            <strong>Mostrar tudo (API)</strong>
-                            <p>Exibe inclusive registros da API federal que não deram "match" direto com o seu banco de dados.</p>
-                          </div>
+                          <div><strong>Por servidor</strong><p>Visão consolidada agrupando todas as ocorrências por servidor, com total de saques e meses.</p></div>
                         </div>
                       </div>
                     </div>
-
-                    {/* Coluna 2: Lógica de Cruzamento */}
                     <div className="info-col">
-                      <div className="info-section-header">
-                        <Zap size={18} />
-                        <h3>Como o cruzamento é feito</h3>
-                      </div>
-                      <p className="info-text">O sistema realiza o cruzamento em 3 etapas para garantir a precisão:</p>
+                      <div className="info-section-header"><Zap size={18} /><h3>Como o cruzamento é feito</h3></div>
+                      <p className="info-text">O sistema realiza o cruzamento em 3 etapas:</p>
                       <ol className="info-steps">
-                        <li><strong>Identificação:</strong> Localiza o servidor no Oracle e extrai a data do primeiro ato de admissão (Ato 1 ou 2).</li>
-                        <li><strong>Pareamento:</strong> Compara o nome normalizado e o CPF mascarado com a base do Portal da Transparência.</li>
-                        <li><strong>Validação Temporal:</strong> Verifica se a competência do benefício coincide com o período em que o servidor já era ativo.</li>
+                        <li><strong>Identificação:</strong> Extrai CPF e data de admissão do Oracle ou CSV.</li>
+                        <li><strong>Pareamento:</strong> Compara nome normalizado e CPF mascarado com o Portal da Transparência.</li>
+                        <li><strong>Validação Temporal:</strong> Verifica se o saque coincide com período em que o servidor já era ativo.</li>
                       </ol>
                     </div>
                   </div>
-
                   <div className="info-grid-modern" style={{ marginTop: '2rem' }}>
-                    {/* Coluna 3: Sistemas */}
                     <div className="info-col">
-                      <div className="info-section-header">
-                        <Database size={18} />
-                        <h3>Os sistemas monitorados</h3>
-                      </div>
+                      <div className="info-section-header"><Database size={18} /><h3>Os sistemas monitorados</h3></div>
                       <ul className="info-bullets">
-                        <li><strong>Oracle Municipal:</strong> Fonte dos dados de pessoal, cargos e datas de ingresso (Ato Pessoal).</li>
-                        <li><strong>Portal da Transparência:</strong> Dados oficiais do Governo Federal sobre pagamentos do Novo Bolsa Família.</li>
+                        <li><strong>Oracle Municipal:</strong> Dados de pessoal, cargos e datas de ingresso.</li>
+                        <li><strong>Portal da Transparência:</strong> Pagamentos do Novo Bolsa Família (Governo Federal).</li>
                       </ul>
-                      <div className="info-note">
-                        * O sistema busca dados via API oficial do Governo Federal em tempo real.
-                      </div>
+                      <div className="info-note">* Busca em tempo real via API oficial do Governo Federal.</div>
                     </div>
-
-                    {/* Coluna 4: Interpretando Números */}
                     <div className="info-col">
-                      <div className="info-section-header">
-                        <BarChart3 size={18} />
-                        <h3>Como interpretar os números</h3>
-                      </div>
-                      <p className="info-text">Os indicadores no topo ajudam a medir o impacto financeiro:</p>
+                      <div className="info-section-header"><BarChart3 size={18} /><h3>Como interpretar os números</h3></div>
+                      <p className="info-text">Os indicadores no topo medem o impacto financeiro:</p>
                       <div className="info-card-explain">
-                        <strong>Irregularidades:</strong> Número de servidores distintos com pelo menos um saque indevido.<br/>
-                        <strong>Valor em Risco:</strong> Soma total dos valores sacados em períodos onde o servidor já estava admitido.
+                        <strong>Irregularidades:</strong> Servidores com pelo menos um saque indevido.<br/>
+                        <strong>Valor em Risco:</strong> Soma dos saques em períodos com vínculo ativo.
                       </div>
                     </div>
                   </div>
-
                   <div className="info-footer-modern">
-                    Este monitor é uma ferramenta de apoio à fiscalização. Todo alerta de irregularidade deve ser submetido a processo administrativo para ampla defesa e contraditório antes de conclusões definitivas.
+                    Este monitor é uma ferramenta de apoio à fiscalização. Todo alerta deve ser submetido a processo administrativo para ampla defesa e contraditório antes de conclusões definitivas.
                   </div>
                 </div>
               </>

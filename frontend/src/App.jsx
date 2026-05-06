@@ -567,16 +567,21 @@ export default function App() {
               {/* ── Período via input[type=month] ── */}
               <div className="field" style={{ marginTop: '1.1rem' }}>
                 <label>Período de referência</label>
-                <div className="field-row">
-                  <div className="field" style={{ marginBottom: 0 }}>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                  <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 0 }}>
                     <label style={{ fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-3)' }}>De</label>
-                    <input type="month" value={toMonthInput(config.m_ini)}
-                      onChange={e => setConfig({ ...config, m_ini: fromMonthInput(e.target.value) })} />
+                    <div className="month-input-wrap">
+                      <input type="month" value={toMonthInput(config.m_ini)}
+                        onChange={e => setConfig({ ...config, m_ini: fromMonthInput(e.target.value) })} />
+                    </div>
                   </div>
-                  <div className="field" style={{ marginBottom: 0 }}>
+                  <div style={{ color: 'var(--text-3)', paddingBottom: '0.65rem', fontSize: '0.9rem', flexShrink: 0 }}>→</div>
+                  <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 0 }}>
                     <label style={{ fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-3)' }}>Até</label>
-                    <input type="month" value={toMonthInput(config.m_fim)}
-                      onChange={e => setConfig({ ...config, m_fim: fromMonthInput(e.target.value) })} />
+                    <div className="month-input-wrap">
+                      <input type="month" value={toMonthInput(config.m_fim)}
+                        onChange={e => setConfig({ ...config, m_fim: fromMonthInput(e.target.value) })} />
+                    </div>
                   </div>
                 </div>
               </div>

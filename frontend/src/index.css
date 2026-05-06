@@ -298,8 +298,7 @@ body {
 
 .field input[type="month"] {
   width: 100%;
-  padding: 0.6rem 0.75rem;
-  text-align: left;
+  padding: 0.6rem 2.2rem 0.6rem 0.85rem;
   font-family: inherit;
   font-size: 0.875rem;
   color: var(--text);
@@ -307,28 +306,31 @@ body {
   border: 1px solid var(--border-strong);
   border-radius: 8px;
   cursor: pointer;
-  appearance: none;
-  -webkit-appearance: none;
+  box-sizing: border-box;
 }
 
 .field input[type="month"]::-webkit-calendar-picker-indicator {
-  opacity: 0.5;
+  position: absolute;
+  right: 0.6rem;
+  opacity: 0.45;
   cursor: pointer;
-  margin-left: auto;
+  width: 16px;
+  height: 16px;
 }
 
-.field input[type="month"]::-webkit-datetime-edit {
-  padding: 0;
-}
-
-.field input[type="month"]::-webkit-datetime-edit-fields-wrapper {
-  padding: 0;
-}
+.field input[type="month"]::-webkit-datetime-edit { padding: 0; }
+.field input[type="month"]::-webkit-datetime-edit-fields-wrapper { padding: 0; }
 
 .field input[type="month"]:focus {
   outline: none;
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+
+/* wrapper para posicionar o ícone corretamente */
+.month-input-wrap {
+  position: relative;
+  display: block;
 }
 
 /* ── Upload zone ──────────────────────────────────────── */

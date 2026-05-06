@@ -447,6 +447,67 @@ export default function App() {
   const isProcessing = fase === 'processing';
 
   // ═══════════════════════════════════════════════════════
+  // INFO BOX (reutilizado em config + resultados)
+  // ═══════════════════════════════════════════════════════
+  const InfoBox = () => (
+    <div className="info-box-modern">
+      <h2 className="info-main-title">Como funciona este monitor de auditoria</h2>
+      <div className="info-grid-modern">
+        <div className="info-col">
+          <div className="info-section-header"><Layout size={18} /><h3>O que significa cada filtro</h3></div>
+          <div className="info-list">
+            <div className="info-list-item">
+              <span className="dot-indicator blue"></span>
+              <div><strong>Todos</strong><p>Servidores com qualquer registro de recebimento no Bolsa Família no período selecionado.</p></div>
+            </div>
+            <div className="info-list-item">
+              <span className="dot-indicator red"></span>
+              <div><strong>Irregulares</strong><p>Casos onde o saque ocorreu <strong>após ou no mesmo mês</strong> da admissão no cargo público — o caso mais suspeito.</p></div>
+            </div>
+            <div className="info-list-item">
+              <span className="dot-indicator blue"></span>
+              <div><strong>Por servidor</strong><p>Visão consolidada: agrupa todos os saques de um mesmo servidor em uma linha expansível, com total acumulado.</p></div>
+            </div>
+          </div>
+        </div>
+        <div className="info-col">
+          <div className="info-section-header"><Zap size={18} /><h3>Como o cruzamento é feito</h3></div>
+          <p className="info-text">O sistema realiza o cruzamento em 3 etapas:</p>
+          <ol className="info-steps">
+            <li><strong>Identificação:</strong> Extrai CPF e data de admissão do Oracle ou CSV.</li>
+            <li><strong>Pareamento:</strong> Compara nome normalizado e CPF mascarado com o Portal da Transparência.</li>
+            <li><strong>Validação Temporal:</strong> Verifica se o saque coincide com período em que o servidor já era ativo.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div className="info-grid-modern" style={{ marginTop: '2rem' }}>
+        <div className="info-col">
+          <div className="info-section-header"><Database size={18} /><h3>Os sistemas monitorados</h3></div>
+          <ul className="info-bullets">
+            <li><strong>Oracle Municipal:</strong> Dados de pessoal, cargos e datas de ingresso.</li>
+            <li><strong>Portal da Transparência:</strong> Pagamentos do Novo Bolsa Família (Governo Federal).</li>
+          </ul>
+          <div className="info-note">* Busca em tempo real via API oficial do Governo Federal.</div>
+        </div>
+        <div className="info-col">
+          <div className="info-section-header"><BarChart3 size={18} /><h3>Atenção: falsos positivos</h3></div>
+          <p className="info-text">Nem todo match é uma irregularidade confirmada. Fique atento a:</p>
+          <ul className="info-bullets">
+            <li><strong>⚠ X NIS:</strong> NIS distintos para o mesmo CPF indicam que o beneficiário pode ser outra pessoa com nome semelhante.</li>
+            <li><strong>Modo Teste ativo:</strong> Limita a 100 páginas/mês e 500 CPFs — resultados podem estar incompletos.</li>
+            <li><strong>NIS</strong> (Número de Identificação Social) é diferente do CPF — identifica o beneficiário no Cadastro Único.</li>
+          </ul>
+        </div>
+      </div>
+
+      <div className="info-footer-modern">
+        Este monitor é uma ferramenta de apoio à fiscalização. Todo alerta deve ser submetido a processo administrativo para ampla defesa e contraditório antes de conclusões definitivas.
+      </div>
+    </div>
+  );
+
+  // ═══════════════════════════════════════════════════════
   // TOPBAR
   // ═══════════════════════════════════════════════════════
   const Topbar = () => (
@@ -729,6 +790,8 @@ export default function App() {
             </div>
           </div>
         </div>
+
+        <InfoBox />
       </div>
     </>
   );
@@ -994,59 +1057,7 @@ export default function App() {
                   </div>
                 )}
 
-                {/* ── Info box ── */}
-                <div className="info-box-modern">
-                  <h2 className="info-main-title">Como funciona este monitor de auditoria</h2>
-                  <div className="info-grid-modern">
-                    <div className="info-col">
-                      <div className="info-section-header"><Layout size={18} /><h3>O que significa cada filtro</h3></div>
-                      <div className="info-list">
-                        <div className="info-list-item">
-                          <span className="dot-indicator blue"></span>
-                          <div><strong>Todos</strong><p>Servidores com qualquer registro de recebimento no Bolsa Família no período selecionado.</p></div>
-                        </div>
-                        <div className="info-list-item">
-                          <span className="dot-indicator red"></span>
-                          <div><strong>Irregulares</strong><p>Casos onde o saque ocorreu <strong>após ou no mesmo mês</strong> da admissão no cargo público.</p></div>
-                        </div>
-                        <div className="info-list-item">
-                          <span className="dot-indicator ghost"></span>
-                          <div><strong>Por servidor</strong><p>Visão consolidada agrupando todas as ocorrências por servidor, com total de saques e meses.</p></div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="info-col">
-                      <div className="info-section-header"><Zap size={18} /><h3>Como o cruzamento é feito</h3></div>
-                      <p className="info-text">O sistema realiza o cruzamento em 3 etapas:</p>
-                      <ol className="info-steps">
-                        <li><strong>Identificação:</strong> Extrai CPF e data de admissão do Oracle ou CSV.</li>
-                        <li><strong>Pareamento:</strong> Compara nome normalizado e CPF mascarado com o Portal da Transparência.</li>
-                        <li><strong>Validação Temporal:</strong> Verifica se o saque coincide com período em que o servidor já era ativo.</li>
-                      </ol>
-                    </div>
-                  </div>
-                  <div className="info-grid-modern" style={{ marginTop: '2rem' }}>
-                    <div className="info-col">
-                      <div className="info-section-header"><Database size={18} /><h3>Os sistemas monitorados</h3></div>
-                      <ul className="info-bullets">
-                        <li><strong>Oracle Municipal:</strong> Dados de pessoal, cargos e datas de ingresso.</li>
-                        <li><strong>Portal da Transparência:</strong> Pagamentos do Novo Bolsa Família (Governo Federal).</li>
-                      </ul>
-                      <div className="info-note">* Busca em tempo real via API oficial do Governo Federal.</div>
-                    </div>
-                    <div className="info-col">
-                      <div className="info-section-header"><BarChart3 size={18} /><h3>Como interpretar os números</h3></div>
-                      <p className="info-text">Os indicadores no topo medem o impacto financeiro:</p>
-                      <div className="info-card-explain">
-                        <strong>Irregularidades:</strong> Servidores com pelo menos um saque indevido.<br/>
-                        <strong>Valor em Risco:</strong> Soma dos saques em períodos com vínculo ativo.
-                      </div>
-                    </div>
-                  </div>
-                  <div className="info-footer-modern">
-                    Este monitor é uma ferramenta de apoio à fiscalização. Todo alerta deve ser submetido a processo administrativo para ampla defesa e contraditório antes de conclusões definitivas.
-                  </div>
-                </div>
+                <InfoBox />
               </>
             )}
           </div>

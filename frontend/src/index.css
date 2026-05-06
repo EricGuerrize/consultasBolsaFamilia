@@ -435,8 +435,10 @@ body {
 }
 
 .combobox-dropdown li:hover,
-.combobox-dropdown li.active { background: var(--blue-faint); }
-.combobox-dropdown li.active .city-name { color: var(--blue); }
+.combobox-dropdown li.active,
+.combobox-dropdown li.highlighted { background: var(--blue-faint); }
+.combobox-dropdown li.active .city-name,
+.combobox-dropdown li.highlighted .city-name { color: var(--blue); }
 
 .city-name { color: var(--text); }
 .city-meta { font-size: 0.7rem; color: var(--text-3); white-space: nowrap; margin-left: 6px; }

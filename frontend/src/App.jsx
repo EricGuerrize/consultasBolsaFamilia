@@ -34,7 +34,9 @@ export default function App() {
   const [municipios, setMunicipios] = useState([]);
   const [municipioSearch, setMunicipioSearch] = useState('');
   const [showMunicipioDropdown, setShowMunicipioDropdown] = useState(false);
+  const [municipioHighlight, setMunicipioHighlight] = useState(-1);
   const municipioRef = useRef(null);
+  const municipioListRef = useRef(null);
 
   // ── Config consulta ──────────────────────────
   const [modoTeste, setModoTeste] = useState(true);
@@ -597,27 +599,79 @@ export default function App() {
                   </label>
                   <div className="combobox full-width">
                     <Search className="search-icon-inside" size={16} />
-                    <input type="text" className="input-large"
-                      placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Digite o nome do município...'}
-                      value={municipioSearch} disabled={municipios.length === 0}
-                      onChange={e => { setMunicipioSearch(e.target.value); setShowMunicipioDropdown(true); if (!e.target.value) setConfig(p => ({ ...p, ibge: '' })); }}
-                      onFocus={() => setShowMunicipioDropdown(true)} />
-                    {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
-                    {showMunicipioDropdown && municipioSearch.trim().length >= 2 && (() => {
+                    {(() => {
                       const q = municipioSearch.toLowerCase();
-                      const filtered = municipios.filter(m => m.uf === 'MT' && (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch)));
+                      const filtered = municipioSearch.trim().length >= 2
+                        ? municipios.filter(m => m.uf === 'MT' && (m.nome.toLowerCase().includes(q) || m.id.includes(municipioSearch))).slice(0, 50)
+                        : [];
+
+                      const selectItem = m => {
+                        setConfig(p => ({ ...p, ibge: m.id }));
+                        setMunicipioSearch(m.nome);
+                        setShowMunicipioDropdown(false);
+                        setMunicipioHighlight(-1);
+                      };
+
+                      const handleKeyDown = e => {
+                        if (!showMunicipioDropdown || !filtered.length) return;
+                        if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          setMunicipioHighlight(h => {
+                            const next = Math.min(h + 1, filtered.length - 1);
+                            const el = municipioListRef.current?.children[next];
+                            el?.scrollIntoView({ block: 'nearest' });
+                            return next;
+                          });
+                        } else if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          setMunicipioHighlight(h => {
+                            const next = Math.max(h - 1, 0);
+                            const el = municipioListRef.current?.children[next];
+                            el?.scrollIntoView({ block: 'nearest' });
+                            return next;
+                          });
+                        } else if (e.key === 'Enter' && municipioHighlight >= 0) {
+                          e.preventDefault();
+                          selectItem(filtered[municipioHighlight]);
+                        } else if (e.key === 'Escape') {
+                          setShowMunicipioDropdown(false);
+                          setMunicipioHighlight(-1);
+                        }
+                      };
+
                       return (
-                        <ul className="combobox-dropdown dropdown-large">
-                          {filtered.length === 0
-                            ? <li className="city-empty">Nenhum município encontrado em MT</li>
-                            : filtered.slice(0, 50).map(m => (
-                              <li key={m.id} className={config.ibge === m.id ? 'active' : ''}
-                                onMouseDown={() => { setConfig(p => ({ ...p, ibge: m.id })); setMunicipioSearch(m.nome); setShowMunicipioDropdown(false); }}>
-                                <span className="city-name" style={{ fontWeight: 600 }}>{m.nome}</span>
-                                <span className="city-meta">{m.id}</span>
-                              </li>
-                            ))}
-                        </ul>
+                        <>
+                          <input type="text" className="input-large"
+                            placeholder={municipios.length === 0 ? 'Carregando municípios...' : 'Digite o nome do município...'}
+                            value={municipioSearch} disabled={municipios.length === 0}
+                            onChange={e => {
+                              setMunicipioSearch(e.target.value);
+                              setShowMunicipioDropdown(true);
+                              setMunicipioHighlight(-1);
+                              if (!e.target.value) setConfig(p => ({ ...p, ibge: '' }));
+                            }}
+                            onFocus={() => setShowMunicipioDropdown(true)}
+                            onKeyDown={handleKeyDown} />
+                          {config.ibge && <span className="combobox-badge">{config.ibge}</span>}
+                          {showMunicipioDropdown && filtered.length > 0 && (
+                            <ul className="combobox-dropdown dropdown-large" ref={municipioListRef}>
+                              {filtered.map((m, idx) => (
+                                <li key={m.id}
+                                  className={[config.ibge === m.id ? 'active' : '', idx === municipioHighlight ? 'highlighted' : ''].join(' ').trim()}
+                                  onMouseEnter={() => setMunicipioHighlight(idx)}
+                                  onMouseDown={() => selectItem(m)}>
+                                  <span className="city-name" style={{ fontWeight: 600 }}>{m.nome}</span>
+                                  <span className="city-meta">{m.id}</span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                          {showMunicipioDropdown && municipioSearch.trim().length >= 2 && filtered.length === 0 && (
+                            <ul className="combobox-dropdown dropdown-large">
+                              <li className="city-empty">Nenhum município encontrado em MT</li>
+                            </ul>
+                          )}
+                        </>
                       );
                     })()}
                   </div>

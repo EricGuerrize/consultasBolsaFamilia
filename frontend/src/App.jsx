@@ -461,13 +461,6 @@ export default function App() {
             <RotateCcw size={12} /> Nova Consulta
           </button>
         )}
-        <button
-          className={`topbar-btn${modoTeste ? ' topbar-btn-amber' : ''}`}
-          onClick={() => setModoTeste(t => !t)}
-          title={modoTeste ? 'Modo Teste ativo — clique para desativar' : 'Modo Teste inativo — clique para ativar'}
-        >
-          {modoTeste ? '⚠ TESTE' : '✓ Completo'}
-        </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', opacity: 0.7 }}>
           {apiHealth === 'ok'       && <><div className="dot green" /> API conectada</>}
           {apiHealth === 'error'    && <><div className="dot red"   /> API offline</>}
@@ -653,6 +646,11 @@ export default function App() {
                   </div>
                 </>
               )}
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.75rem', color: modoTeste ? 'var(--amber)' : 'var(--text-3)', marginBottom: '1rem', fontWeight: 500 }}>
+                <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} />
+                {modoTeste ? '⚠ Modo Teste — 100 págs/mês · 500 CPFs' : 'Modo Teste desativado — execução completa'}
+              </label>
 
               <button className="btn btn-primary btn-full" disabled={!canStart} onClick={startCrossing}>
                 {loading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}

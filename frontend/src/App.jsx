@@ -568,13 +568,13 @@ export default function App() {
               <div className="field" style={{ marginTop: '1.1rem' }}>
                 <label>Período de referência</label>
                 <div className="field-row">
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>De</div>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-3)' }}>De</label>
                     <input type="month" value={toMonthInput(config.m_ini)}
                       onChange={e => setConfig({ ...config, m_ini: fromMonthInput(e.target.value) })} />
                   </div>
-                  <div>
-                    <div style={{ fontSize: '0.7rem', color: 'var(--text-3)', marginBottom: '0.25rem' }}>Até</div>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ fontWeight: 400, fontSize: '0.7rem', color: 'var(--text-3)' }}>Até</label>
                     <input type="month" value={toMonthInput(config.m_fim)}
                       onChange={e => setConfig({ ...config, m_fim: fromMonthInput(e.target.value) })} />
                   </div>

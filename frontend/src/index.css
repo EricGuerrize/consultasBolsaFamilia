@@ -296,6 +296,41 @@ body {
 
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
 
+.field input[type="month"] {
+  width: 100%;
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.field input[type="month"]::-webkit-calendar-picker-indicator {
+  opacity: 0.5;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.field input[type="month"]::-webkit-datetime-edit {
+  padding: 0;
+}
+
+.field input[type="month"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+.field input[type="month"]:focus {
+  outline: none;
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+
 /* ── Upload zone ──────────────────────────────────────── */
 .upload-zone {
   border: 1.5px dashed var(--border-strong);

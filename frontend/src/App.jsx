@@ -75,7 +75,7 @@ export default function App() {
   const [config, setConfig] = useState({
     m_ini: '202401', m_fim: '202403',
     modo: 'municipio', ibge: '', api_key: '',
-    col_cpf: '', col_nome: '', col_cargo: '', col_admissao: '',
+    col_cpf: '', col_nome: '', col_cargo: '', col_admissao: '', col_orgao: '',
   });
   const [baseUrl, setBaseUrl] = useState(localStorage.getItem('api_url') || '');
 
@@ -170,7 +170,8 @@ export default function App() {
       const nome = find(/pess_nome|nome|servidor/i, [cpf]);
       const cargo = find(/desc_cargo|cargo|fun[cç][aã]o/i, [cpf, nome]);
       const adm = find(/dt_admissao|admiss[aã]o|contrat/i, [cpf, nome, cargo]);
-      return { col_cpf: cpf, col_nome: nome, col_cargo: cargo, col_admissao: adm };
+      const orgao = find(/.rg[aã]o|entidade|secretaria|lota..o/i, [cpf, nome, cargo, adm]);
+      return { col_cpf: cpf, col_nome: nome, col_cargo: cargo, col_admissao: adm, col_orgao: orgao };
     };
 
     if (suffix === 'csv') {
@@ -280,12 +281,13 @@ export default function App() {
       const { rows, sep, headers } = await parseCSV(file);
       const idx = k => headers.indexOf(config[k]);
       const cpfIdx = idx('col_cpf'), nomeIdx = idx('col_nome');
-      const cargoIdx = idx('col_cargo'), admIdx = idx('col_admissao');
+      const cargoIdx = idx('col_cargo'), admIdx = idx('col_admissao'), orgaoIdx = idx('col_orgao');
       rows.slice(1).forEach(row => {
         const c = row.split(sep).map(v => v?.replace(/^"|"$/g, '') || '');
         add(c[cpfIdx], c[nomeIdx] || '', {
           cargo: cargoIdx >= 0 ? c[cargoIdx] : '',
           admissao: admIdx >= 0 ? c[admIdx] : '',
+          orgao: orgaoIdx >= 0 ? c[orgaoIdx] : '',
         });
       });
       return { serverMap: map, totalServidores: rows.length - 1 };
@@ -456,9 +458,10 @@ export default function App() {
     const map = new Map();
     for (const r of filteredResults) {
       const gKey = `${r.cpf}|${r.servidor}`;
-      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, matricula: r.matricula, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0, isIrregular: false });
+      if (!map.has(gKey)) map.set(gKey, { servidor: r.servidor, cpf: r.cpf, matricula: r.matricula, nis: r.nis || '', nisSet: new Set(), ocorrencias: [], totalValor: 0, isIrregular: false, orgao: r.orgao || '' });
       const g = map.get(gKey);
       if (!g.nis && r.nis) g.nis = r.nis;
+      if (!g.orgao && r.orgao) g.orgao = r.orgao;
       if (r.nis) g.nisSet.add(r.nis);
       g.ocorrencias.push(r);
       g.totalValor += r.valor || 0;
@@ -659,7 +662,7 @@ export default function App() {
                       </button>
                       {showMapping && (
                         <div className="mapping-box fade-in" style={{ marginTop: '0.5rem' }}>
-                          {[['col_cpf', 'Coluna de CPF *'], ['col_nome', 'Coluna de Nome'], ['col_cargo', 'Coluna de Cargo'], ['col_admissao', 'Coluna de Admissão']].map(([key, lbl], idx, arr) => (
+                          {[['col_cpf', 'Coluna de CPF *'], ['col_nome', 'Coluna de Nome'], ['col_cargo', 'Coluna de Cargo'], ['col_admissao', 'Coluna de Admissão'], ['col_orgao', 'Coluna de Órgão']].map(([key, lbl], idx, arr) => (
                             <div className="field" key={key} style={{ marginBottom: idx < arr.length - 1 ? '0.7rem' : 0 }}>
                               <label>{lbl}</label>
                               <select value={config[key]} onChange={e => setConfig({ ...config, [key]: e.target.value })}>
@@ -1002,8 +1005,11 @@ export default function App() {
                           <tr key={i}>
                             <td className="td-num">{(paginaAtual - 1) * itensPorPagina + i + 1}</td>
                             <td className="td-bold">
-                              {row.servidor}
-                              {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>IRREGULAR</span>}
+                              <div style={{ display: 'flex', alignItems: 'center' }}>
+                                {row.servidor}
+                                {row.isIrregular && <span className="label-tag" style={{ marginLeft: 8, background: 'rgba(239,68,68,0.1)', color: '#ef4444', border: '1px solid rgba(239,68,68,0.2)' }}>IRREGULAR</span>}
+                              </div>
+                              {row.orgao && <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px', fontWeight: 'normal' }}>{row.orgao}</div>}
                             </td>
                             <td className="td-mono">
                               <div>{row.cpf}</div>
@@ -1055,8 +1061,11 @@ export default function App() {
                                       {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
                                     </td>
                                     <td className="td-bold">
-                                      {g.isIrregular && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ IRREGULAR</span>}
-                                      {g.servidor}
+                                      <div style={{ display: 'flex', alignItems: 'center' }}>
+                                        {g.isIrregular && <span className="badge badge-red" style={{ marginRight: '6px', fontSize: '0.65rem' }}>⚠ IRREGULAR</span>}
+                                        {g.servidor}
+                                      </div>
+                                      {g.orgao && <div style={{ fontSize: '0.65rem', opacity: 0.7, marginTop: '2px', fontWeight: 'normal' }}>{g.orgao}</div>}
                                     </td>
                                     <td className="td-mono">
                                       <div>{g.cpf}</div>

@@ -9,36 +9,32 @@ import {
 const PARALLEL_WORKERS = 1;
 
 const MOCK_RESULTS = [
-  {
-    servidor: "MARIA SILVA SANTOS", cpf: "123.456.789-00", beneficiario: "MARIA SILVA SANTOS",
-    cargo: "PROFESSOR", admissao: "10/02/2021", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
-    nis: "12345678901", municipio: "Rondonópolis", uf: "MT", mes: "202401", data_saque: "15/01/2024",
-    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10001", pagina: 1, isMatch: true, isIrregular: true
-  },
-  {
-    servidor: "JOÃO PEDRO OLIVEIRA", cpf: "987.654.321-11", beneficiario: "JOÃO PEDRO OLIVEIRA",
-    cargo: "VIGIA", admissao: "05/03/2023", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
-    nis: "10987654321", municipio: "Rondonópolis", uf: "MT", mes: "202402", data_saque: "18/02/2024",
-    valor: 600.00, tipo_ato: "CONTRATAÇÃO TEMPORÁRIA", matricula: "10002", pagina: 1, isMatch: true, isIrregular: true
-  },
-  {
-    servidor: "ANA COSTA PEREIRA", cpf: "456.789.123-22", beneficiario: "ANA COSTA PEREIRA",
-    cargo: "MERENDEIRA", admissao: "01/04/2024", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
-    nis: "11223344556", municipio: "Rondonópolis", uf: "MT", mes: "202401", data_saque: "20/01/2024",
-    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10003", pagina: 1, isMatch: true, isIrregular: false
-  },
-  {
-    servidor: "CARLOS ALBERTO SOUZA", cpf: "321.654.987-33", beneficiario: "CARLOS ALBERTO SOUZA",
-    cargo: "MOTORISTA", admissao: "15/05/2018", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
-    nis: "66554433221", municipio: "Rondonópolis", uf: "MT", mes: "202403", data_saque: "10/03/2024",
-    valor: 750.00, tipo_ato: "NOMEAÇÃO", matricula: "10004", pagina: 1, isMatch: true, isIrregular: true
-  },
-  {
-    servidor: "BEATRIZ LIMA FERREIRA", cpf: "741.852.963-44", beneficiario: "BEATRIZ LIMA FERREIRA",
-    cargo: "AUXILIAR ADMINISTRATIVO", admissao: "20/08/2022", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
-    nis: "99887766554", municipio: "Rondonópolis", uf: "MT", mes: "202402", data_saque: "22/02/2024",
-    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10005", pagina: 1, isMatch: true, isIrregular: true
-  }
+  {"servidor": "ALANA BEATRIZ ESPIRITO SANTO", "cpf": "689.726.871-20", "matricula": "", "nis": "20419495023", "beneficiario": "ALANA BEATRIZ ESPIRITO SANTO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 750.0, "isIrregular": true, "isMatch": true, "admissao": "10/05/2020", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 17},
+  {"servidor": "ALANA THAINA SANTANA OLIVEIRA", "cpf": "054.632.131-35", "matricula": "", "nis": "20759137506", "beneficiario": "ALANA THAINA SANTANA OLIVEIRA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 690.0, "isIrregular": false, "isMatch": true, "admissao": "01/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 17},
+  {"servidor": "ALESSANDRA LEITE DA SILVA", "cpf": "040.775.861-51", "matricula": "", "nis": "20667837528", "beneficiario": "ALESSANDRA LEITE DA SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 450.0, "isIrregular": false, "isMatch": true, "admissao": "10/08/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 23},
+  {"servidor": "ALESSANDRA VICUNA DE MOURA MORAES", "cpf": "615.553.121-87", "matricula": "", "nis": "12504010186", "beneficiario": "ALESSANDRA VICUNA DE MOURA MORAES", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 375.0, "isIrregular": false, "isMatch": true, "admissao": "22/10/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 24},
+  {"servidor": "ALINE CHRISTINA LOOTE MORAES", "cpf": "048.090.421-97", "matricula": "", "nis": "13390132405", "beneficiario": "ALINE CHRISTINA LOOTE MORAES", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 900.0, "isIrregular": false, "isMatch": true, "admissao": "01/05/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 30},
+  {"servidor": "ALINE DE ASSIS MORAIS SILVA", "cpf": "041.657.341-01", "matricula": "", "nis": "16039995557", "beneficiario": "ALINE DE ASSIS MORAIS SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 700.0, "isIrregular": false, "isMatch": true, "admissao": "10/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 31},
+  {"servidor": "ANDRESSA DUARTE ANDRIOLLI", "cpf": "721.614.931-91", "matricula": "", "nis": "21029126358", "beneficiario": "ANDRESSA DUARTE ANDRIOLLI", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 800.0, "isIrregular": false, "isMatch": true, "admissao": "01/09/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 74},
+  {"servidor": "ANDRESSA GONCALVES LISBOA", "cpf": "053.050.131-78", "matricula": "", "nis": "21048012133", "beneficiario": "ANDRESSA GONCALVES LISBOA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 600.0, "isIrregular": false, "isMatch": true, "admissao": "05/07/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 74},
+  {"servidor": "ANDRESSA NASCIMENTO ALEIXO", "cpf": "040.052.741-37", "matricula": "", "nis": "16013740683", "beneficiario": "ANDRESSA NASCIMENTO ALEIXO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 400.0, "isIrregular": true, "isMatch": true, "admissao": "10/01/2022", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 74},
+  {"servidor": "AUREA CELIA ANDRADE DE ALMEIDA", "cpf": "021.712.651-08", "matricula": "", "nis": "16113660460", "beneficiario": "AUREA CELIA ANDRADE DE ALMEIDA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202401", "data_saque": "15/01/2024", "valor": 750.0, "isIrregular": false, "isMatch": true, "admissao": "05/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 99},
+  {"servidor": "ALANA BEATRIZ ESPIRITO SANTO", "cpf": "689.726.871-20", "matricula": "", "nis": "20419495023", "beneficiario": "ALANA BEATRIZ ESPIRITO SANTO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 750.0, "isIrregular": true, "isMatch": true, "admissao": "10/05/2020", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 17},
+  {"servidor": "ALANA THAINA SANTANA OLIVEIRA", "cpf": "054.632.131-35", "matricula": "", "nis": "20759137506", "beneficiario": "ALANA THAINA SANTANA OLIVEIRA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 690.0, "isIrregular": true, "isMatch": true, "admissao": "01/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 17},
+  {"servidor": "ALESSANDRA LEITE DA SILVA", "cpf": "040.775.861-51", "matricula": "", "nis": "20667837528", "beneficiario": "ALESSANDRA LEITE DA SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 450.0, "isIrregular": false, "isMatch": true, "admissao": "10/08/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 23},
+  {"servidor": "ALINE CHRISTINA LOOTE MORAES", "cpf": "048.090.421-97", "matricula": "", "nis": "13390132405", "beneficiario": "ALINE CHRISTINA LOOTE MORAES", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 900.0, "isIrregular": false, "isMatch": true, "admissao": "01/05/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 30},
+  {"servidor": "ALINE DE ASSIS MORAIS SILVA", "cpf": "041.657.341-01", "matricula": "", "nis": "16039995557", "beneficiario": "ALINE DE ASSIS MORAIS SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 700.0, "isIrregular": true, "isMatch": true, "admissao": "10/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 30},
+  {"servidor": "ANDRESSA GONCALVES LISBOA", "cpf": "053.050.131-78", "matricula": "", "nis": "21048012133", "beneficiario": "ANDRESSA GONCALVES LISBOA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 600.0, "isIrregular": false, "isMatch": true, "admissao": "05/07/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 74},
+  {"servidor": "ANDRESSA NASCIMENTO ALEIXO", "cpf": "040.052.741-37", "matricula": "", "nis": "16013740683", "beneficiario": "ANDRESSA NASCIMENTO ALEIXO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 400.0, "isIrregular": true, "isMatch": true, "admissao": "10/01/2022", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 74},
+  {"servidor": "AUREA CELIA ANDRADE DE ALMEIDA", "cpf": "021.712.651-08", "matricula": "", "nis": "16113660460", "beneficiario": "AUREA CELIA ANDRADE DE ALMEIDA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202402", "data_saque": "15/02/2024", "valor": 750.0, "isIrregular": true, "isMatch": true, "admissao": "05/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 99},
+  {"servidor": "ALANA BEATRIZ ESPIRITO SANTO", "cpf": "689.726.871-20", "matricula": "", "nis": "20419495023", "beneficiario": "ALANA BEATRIZ ESPIRITO SANTO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 750.0, "isIrregular": true, "isMatch": true, "admissao": "10/05/2020", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 16},
+  {"servidor": "ALANA THAINA SANTANA OLIVEIRA", "cpf": "054.632.131-35", "matricula": "", "nis": "20759137506", "beneficiario": "ALANA THAINA SANTANA OLIVEIRA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 690.0, "isIrregular": true, "isMatch": true, "admissao": "01/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 17},
+  {"servidor": "ALESSANDRA LEITE DA SILVA", "cpf": "040.775.861-51", "matricula": "", "nis": "20667837528", "beneficiario": "ALESSANDRA LEITE DA SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 450.0, "isIrregular": false, "isMatch": true, "admissao": "10/08/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 22},
+  {"servidor": "ALINE CHRISTINA LOOTE MORAES", "cpf": "048.090.421-97", "matricula": "", "nis": "13390132405", "beneficiario": "ALINE CHRISTINA LOOTE MORAES", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 900.0, "isIrregular": false, "isMatch": true, "admissao": "01/05/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 29},
+  {"servidor": "ALINE DE ASSIS MORAIS SILVA", "cpf": "041.657.341-01", "matricula": "", "nis": "16039995557", "beneficiario": "ALINE DE ASSIS MORAIS SILVA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 700.0, "isIrregular": true, "isMatch": true, "admissao": "10/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 30},
+  {"servidor": "ANDRESSA GONCALVES LISBOA", "cpf": "053.050.131-78", "matricula": "", "nis": "21048012133", "beneficiario": "ANDRESSA GONCALVES LISBOA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 600.0, "isIrregular": false, "isMatch": true, "admissao": "05/07/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 72},
+  {"servidor": "ANDRESSA NASCIMENTO ALEIXO", "cpf": "040.052.741-37", "matricula": "", "nis": "16013740683", "beneficiario": "ANDRESSA NASCIMENTO ALEIXO", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 350.0, "isIrregular": true, "isMatch": true, "admissao": "10/01/2022", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 72},
+  {"servidor": "AUREA CELIA ANDRADE DE ALMEIDA", "cpf": "021.712.651-08", "matricula": "", "nis": "16113660460", "beneficiario": "AUREA CELIA ANDRADE DE ALMEIDA", "municipio": "RONDONÓPOLIS", "uf": "MT", "mes": "202403", "data_saque": "15/03/2024", "valor": 750.0, "isIrregular": true, "isMatch": true, "admissao": "05/02/2024", "orgao": "PREFEITURA MUNICIPAL DE RONDONÓPOLIS", "pagina": 96}
 ];
 
 // YYYYMM ↔ YYYY-MM

@@ -305,7 +305,7 @@ export default function App() {
     cancelRef.current = false;
 
     if (modoApresentacao) {
-      setStatus(prev => ({ ...prev, message: 'Modo Apresentação Ativo. Buscando dados...' }));
+      setStatus(prev => ({ ...prev, message: 'Consultando API do Portal da Transparência...' }));
       const delayMs = 6000;
       const steps = 100;
       for (let i = 0; i <= steps; i++) {

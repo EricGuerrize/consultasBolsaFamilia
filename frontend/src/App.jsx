@@ -68,7 +68,7 @@ export default function App() {
   const municipioListRef = useRef(null);
 
   // ── Config consulta ──────────────────────────
-  const [modoTeste, setModoTeste] = useState(true);
+  const [limitadorPaginas, setLimitadorPaginas] = useState(100);
   const [modoApresentacao, setModoApresentacao] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
@@ -338,7 +338,7 @@ export default function App() {
       const flush = () => setStatus(prev => ({ ...prev, result: [...allResults] }));
 
       if (config.modo === 'municipio') {
-        const MAX_PAGINAS = modoTeste ? 100 : Infinity;
+        const MAX_PAGINAS = limitadorPaginas > 0 ? limitadorPaginas : Infinity;
 
         const fetchMes = async mes => {
           if (cancelRef.current) return;
@@ -386,7 +386,7 @@ export default function App() {
         }
       } else {
         const todos = [...serverMap.values()].flat();
-        const servidores = modoTeste ? todos.slice(0, 500) : todos;
+        const servidores = limitadorPaginas > 0 ? todos.slice(0, 500) : todos;
         for (let i = 0; i < meses.length; i++) {
           const mes = meses[i];
           for (let j = 0; j < servidores.length; j++) {
@@ -817,10 +817,24 @@ export default function App() {
                 </>
               )}
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '0.75rem', color: modoTeste ? 'var(--amber)' : 'var(--text-3)', marginBottom: '1rem', fontWeight: 500 }}>
-                <input type="checkbox" checked={modoTeste} onChange={e => setModoTeste(e.target.checked)} />
-                {modoTeste ? '⚠ Modo Teste — 100 págs/mês · 500 CPFs' : 'Modo Teste desativado — execução completa'}
-              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem', color: limitadorPaginas > 0 ? 'var(--amber)' : 'var(--text-3)', marginBottom: '1rem', fontWeight: 500 }}>
+                <input type="checkbox" id="limitToggle" checked={limitadorPaginas > 0} onChange={e => setLimitadorPaginas(e.target.checked ? 100 : 0)} style={{ cursor: 'pointer' }} />
+                <label htmlFor="limitToggle" style={{ cursor: 'pointer', margin: 0 }}>Limitador:</label>
+                <select 
+                  value={limitadorPaginas > 0 ? limitadorPaginas : 100} 
+                  onChange={e => setLimitadorPaginas(Number(e.target.value))} 
+                  disabled={limitadorPaginas === 0}
+                  style={{ padding: '2px 4px', fontSize: '0.75rem', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-card)', color: limitadorPaginas > 0 ? 'inherit' : 'var(--text-3)' }}
+                >
+                  <option value={10}>10 págs/mês</option>
+                  <option value={50}>50 págs/mês</option>
+                  <option value={100}>100 págs/mês</option>
+                  <option value={150}>150 págs/mês</option>
+                  <option value={200}>200 págs/mês</option>
+                  <option value={250}>250 págs/mês</option>
+                </select>
+                {limitadorPaginas > 0 ? '· 500 CPFs' : 'Execução completa'}
+              </div>
 
               <button className="btn btn-primary btn-full" disabled={!canStart} onClick={startCrossing}>
                 {loading ? <Loader2 size={14} className="spin" /> : <Search size={14} />}
@@ -897,7 +911,7 @@ export default function App() {
             <span><strong>Servidores:</strong> {labelFonte}{oracleInfo ? ` (${oracleInfo.total.toLocaleString('pt-BR')} carregados)` : ''}</span>
             <span><strong>Período:</strong> {labelPeriodo}</span>
             <span><strong>Local:</strong> {labelLocal}</span>
-            {modoTeste && <span className="badge badge-amber">Modo Teste</span>}
+            {limitadorPaginas > 0 && <span className="badge badge-amber">Limitador: {limitadorPaginas} págs</span>}
           </div>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {isProcessing && <button className="btn btn-sm btn-danger-ghost" onClick={handleCancel}><X size={12} /> Cancelar</button>}

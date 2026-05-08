@@ -302,13 +302,22 @@ export default function App() {
 
     if (modoApresentacao) {
       setStatus(prev => ({ ...prev, message: 'Consultando API do Portal da Transparência...' }));
-      const delayMs = 6000;
+      const delayMs = 12000;
       const steps = 100;
+      const demoResults = [];
+      
       for (let i = 0; i <= steps; i++) {
         if (cancelRef.current) break;
         await delay(delayMs / steps);
-        setStatus(prev => ({ ...prev, progress: i }));
+        
+        const itemsToHave = Math.floor((i / 100) * MOCK_RESULTS.length);
+        while (demoResults.length < itemsToHave) {
+          demoResults.push(MOCK_RESULTS[demoResults.length]);
+        }
+        
+        setStatus(prev => ({ ...prev, progress: i, result: [...demoResults] }));
       }
+      
       if (!cancelRef.current) {
         setStatus({ status: 'completed', progress: 100, result: MOCK_RESULTS, message: 'Concluído' });
         setFase('done');

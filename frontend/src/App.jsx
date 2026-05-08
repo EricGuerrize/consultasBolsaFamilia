@@ -8,6 +8,39 @@ import {
 
 const PARALLEL_WORKERS = 1;
 
+const MOCK_RESULTS = [
+  {
+    servidor: "MARIA SILVA SANTOS", cpf: "123.456.789-00", beneficiario: "MARIA SILVA SANTOS",
+    cargo: "PROFESSOR", admissao: "10/02/2021", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
+    nis: "12345678901", municipio: "Rondonópolis", uf: "MT", mes: "202401", data_saque: "15/01/2024",
+    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10001", pagina: 1, isMatch: true, isIrregular: true
+  },
+  {
+    servidor: "JOÃO PEDRO OLIVEIRA", cpf: "987.654.321-11", beneficiario: "JOÃO PEDRO OLIVEIRA",
+    cargo: "VIGIA", admissao: "05/03/2023", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
+    nis: "10987654321", municipio: "Rondonópolis", uf: "MT", mes: "202402", data_saque: "18/02/2024",
+    valor: 600.00, tipo_ato: "CONTRATAÇÃO TEMPORÁRIA", matricula: "10002", pagina: 1, isMatch: true, isIrregular: true
+  },
+  {
+    servidor: "ANA COSTA PEREIRA", cpf: "456.789.123-22", beneficiario: "ANA COSTA PEREIRA",
+    cargo: "MERENDEIRA", admissao: "01/04/2024", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
+    nis: "11223344556", municipio: "Rondonópolis", uf: "MT", mes: "202401", data_saque: "20/01/2024",
+    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10003", pagina: 1, isMatch: true, isIrregular: false
+  },
+  {
+    servidor: "CARLOS ALBERTO SOUZA", cpf: "321.654.987-33", beneficiario: "CARLOS ALBERTO SOUZA",
+    cargo: "MOTORISTA", admissao: "15/05/2018", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
+    nis: "66554433221", municipio: "Rondonópolis", uf: "MT", mes: "202403", data_saque: "10/03/2024",
+    valor: 750.00, tipo_ato: "NOMEAÇÃO", matricula: "10004", pagina: 1, isMatch: true, isIrregular: true
+  },
+  {
+    servidor: "BEATRIZ LIMA FERREIRA", cpf: "741.852.963-44", beneficiario: "BEATRIZ LIMA FERREIRA",
+    cargo: "AUXILIAR ADMINISTRATIVO", admissao: "20/08/2022", orgao: "PREFEITURA MUNICIPAL DE RONDONÓPOLIS",
+    nis: "99887766554", municipio: "Rondonópolis", uf: "MT", mes: "202402", data_saque: "22/02/2024",
+    valor: 600.00, tipo_ato: "NOMEAÇÃO", matricula: "10005", pagina: 1, isMatch: true, isIrregular: true
+  }
+];
+
 // YYYYMM ↔ YYYY-MM
 const toMonthInput = m => m ? `${m.slice(0, 4)}-${m.slice(4)}` : '';
 const fromMonthInput = v => v ? v.replace('-', '') : '';
@@ -40,6 +73,7 @@ export default function App() {
 
   // ── Config consulta ──────────────────────────
   const [modoTeste, setModoTeste] = useState(true);
+  const [modoApresentacao, setModoApresentacao] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showMapping, setShowMapping] = useState(false);
   const [config, setConfig] = useState({
@@ -267,9 +301,25 @@ export default function App() {
     if (fonteServidores === 'csv' && !file) return;
     setLoading(true); setError(null);
     setStatus({ status: 'processing', progress: 0, result: [], message: 'Iniciando...' });
-    setFase('processing'); setSearchFilter(''); setViewMode('todos');
-    setPaginaAtual(1); setExpandedRows(new Set());
+    setFase('processing'); setSearchFilter(''); setFase('processing'); setPaginaAtual(1); setExpandedRows(new Set());
     cancelRef.current = false;
+
+    if (modoApresentacao) {
+      setStatus(prev => ({ ...prev, message: 'Modo Apresentação Ativo. Buscando dados...' }));
+      const delayMs = 6000;
+      const steps = 100;
+      for (let i = 0; i <= steps; i++) {
+        if (cancelRef.current) break;
+        await delay(delayMs / steps);
+        setStatus(prev => ({ ...prev, progress: i }));
+      }
+      if (!cancelRef.current) {
+        setStatus({ status: 'completed', progress: 100, result: MOCK_RESULTS, message: 'Concluído' });
+        setFase('done');
+      }
+      setLoading(false);
+      return;
+    }
 
     try {
       const { serverMap } = await buildServerMap();
@@ -792,6 +842,13 @@ export default function App() {
         </div>
 
         <InfoBox />
+
+        <div style={{ position: 'fixed', bottom: 10, right: 10, opacity: 0.3, transition: 'opacity 0.2s', zIndex: 100 }} onMouseEnter={e => e.currentTarget.style.opacity = 1} onMouseLeave={e => e.currentTarget.style.opacity = 0.3}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px' }}>
+            <input type="checkbox" checked={modoApresentacao} onChange={e => setModoApresentacao(e.target.checked)} id="mockToggle" style={{ width: 'auto', margin: 0 }} />
+            <label htmlFor="mockToggle" style={{ cursor: 'pointer', margin: 0, fontWeight: 'normal', color: 'var(--text-3)' }}>Modo Demo</label>
+          </div>
+        </div>
       </div>
     </>
   );

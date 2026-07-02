@@ -49,6 +49,7 @@ LEFT JOIN (
         FROM aplic2008.ato_pessoal@conectprod a
         INNER JOIN aplic2008.tipo_ato_pessoal@conectprod ta
                 ON ta.tatop_codigo = a.tatop_codigo
+        WHERE a.ent_codigo = '1118181'
     )
     WHERE rn = 1
 ) ap

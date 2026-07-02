@@ -127,20 +127,20 @@ def cruzar_em_massa(df_serv: pd.DataFrame, registros_api: list[dict]) -> list[di
         cpf_api  = bf.get("cpfFormatado", "") # Já vem mascarado da API: ***.XXX.XXX-**
         
         chave = f"{nome_api}|{cpf_api}"
-        if chave not in api_por_chave:
-            api_por_chave[chave] = []
-        api_por_chave[chave].append(r)
+        api_por_chave.setdefault(chave, []).append(r)
 
+    # Vetoriza o cálculo de nomes normalizados e CPFs mascarados
+    nomes_normalizados = df_serv["pess_nome"].apply(normalizar_nome).values
+    cpfs_mascarados = df_serv["pess_cpf"].apply(mascarar_cpf).values
+    chaves_servidores = [f"{n}|{c}" for n, c in zip(nomes_normalizados, cpfs_mascarados)]
+    
+    servidores_dicts = df_serv.to_dict(orient="records")
+    
     matches: list[dict] = []
     seen: set[str] = set()
     
-    # Itera servidores
-    for _, srv in df_serv.iterrows():
-        nome_srv = normalizar_nome(srv.get("pess_nome", ""))
-        cpf_srv_masc = mascarar_cpf(srv.get("pess_cpf", ""))
-        
-        chave_srv = f"{nome_srv}|{cpf_srv_masc}"
-        
+    # Itera de forma extremamente rápida sobre listas nativas
+    for srv, chave_srv in zip(servidores_dicts, chaves_servidores):
         if chave_srv in api_por_chave:
             for reg_api in api_por_chave[chave_srv]:
                 # Evita duplicatas exatas se houver
@@ -151,7 +151,7 @@ def cruzar_em_massa(df_serv: pd.DataFrame, registros_api: list[dict]) -> list[di
                 if unique_key in seen:
                     continue
                 seen.add(unique_key)
-                matches.append(cruzar_registro(srv.to_dict(), reg_api))
+                matches.append(cruzar_registro(srv, reg_api))
     
     return matches
 

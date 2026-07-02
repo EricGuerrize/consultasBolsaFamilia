@@ -43,6 +43,27 @@ class BolsaFamiliaAPI:
             "Accept": "application/json",
         })
 
+    def _request_with_retry(self, url: str, params: dict, timeout: int = 30, max_retries: int = 5) -> requests.Response:
+        """Faz requisição HTTP com retry automático e backoff exponencial em caso de 429 ou erro de rede."""
+        backoff = 2.0  # Tempo inicial de espera em segundos
+        for attempt in range(max_retries):
+            try:
+                r = self.session.get(url, params=params, timeout=timeout)
+                
+                # Se for Rate Limit ou erro de servidor transitório, aguarda e tenta novamente
+                if r.status_code in (429, 502, 503, 504):
+                    time.sleep(backoff)
+                    backoff *= 2.0
+                    continue
+                    
+                r.raise_for_status()
+                return r
+            except (requests.RequestException, Exception) as e:
+                if attempt == max_retries - 1:
+                    raise e
+                time.sleep(backoff)
+                backoff *= 2.0
+
     def buscar_sacados_municipio(
         self,
         mes_ano: str,
@@ -53,17 +74,12 @@ class BolsaFamiliaAPI:
         """Busca todos os saques de um município em um mês (sequencial, página a página)."""
         resultados = []
         pagina = 1
-        retries = 3
         while True:
             if cancel_flag and cancel_flag():
                 break
             params = {"mesAno": mes_ano, "codigoIbge": codigo_ibge, "pagina": pagina}
             try:
-                r = self.session.get(API_SACADO, params=params, timeout=60)
-                if r.status_code == 429:
-                    time.sleep(2)
-                    continue
-                r.raise_for_status()
+                r = self._request_with_retry(API_SACADO, params=params, timeout=60)
                 data = r.json()
                 if not data:
                     break
@@ -74,10 +90,6 @@ class BolsaFamiliaAPI:
                     break
                 pagina += 1
             except Exception as e:
-                if retries > 0:
-                    retries -= 1
-                    time.sleep(5)
-                    continue
                 raise RuntimeError(f"Erro na API (Município {mes_ano}): {e}")
         return resultados
 
@@ -119,11 +131,7 @@ class BolsaFamiliaAPI:
         while True:
             params = {"cpf": cpf, "pagina": pagina}
             try:
-                r = self.session.get(API_CPF, params=params, timeout=20)
-                if r.status_code == 429:
-                    time.sleep(1)
-                    continue
-                r.raise_for_status()
+                r = self._request_with_retry(API_CPF, params=params, timeout=20)
                 data = r.json()
                 if not data:
                     break

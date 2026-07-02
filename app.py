@@ -157,9 +157,12 @@ def cruzar_em_massa(df_servidores: pd.DataFrame, registros_api: list[dict]) -> p
         if cpf_api:
             api_por_cpf.setdefault(cpf_api, []).append(r)
     
+    # Vetoriza a normalização do CPF para evitar chamadas de função por linha no loop Python
+    cpfs_normalizados = df_servidores["cpf"].apply(normalizar_cpf).values
+    servidores_dicts = df_servidores.to_dict(orient="records")
+    
     linhas = []
-    for _, srv in df_servidores.iterrows():
-        cpf_srv = normalizar_cpf(srv.get("cpf", ""))
+    for srv, cpf_srv in zip(servidores_dicts, cpfs_normalizados):
         if cpf_srv in api_por_cpf:
             for reg in api_por_cpf[cpf_srv]:
                 linhas.append(cruzar_registro(srv, reg))
@@ -529,6 +532,8 @@ class App(tk.Tk):
                     + (f" ({dupls} duplicatas removidas)" if dupls else ""))
             self.lbl_serv_info.configure(text=info, foreground="#22c55e")
             self._status(info)
+        except Exception as e:
+            messagebox.showerror("Erro", f"Falha ao ler arquivo: {e}")
     def _carregar_oracle(self):
         self._status("Conectando ao Oracle...")
         self.btn_oracle.configure(state="disabled")
